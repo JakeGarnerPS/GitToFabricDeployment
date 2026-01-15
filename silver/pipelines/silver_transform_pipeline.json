@@ -1,0 +1,10 @@
+{
+  "name": "silver_transform_pipeline",
+  "activities": [
+    {
+      "name": "RunSilverNotebook",
+      "type": "Notebook",
+      "notebook": "silver/notebooks/02_clean_sales_data.ipynb"
+    }
+  ]
+}

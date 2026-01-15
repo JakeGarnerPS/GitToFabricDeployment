@@ -1,0 +1,23 @@
+{
+  "name": "sales_mart",
+  "tables": [
+    {
+      "name": "customer_sales",
+      "partitions": [
+        {
+          "name": "customer_sales",
+          "source": {
+            "type": "m",
+            "expression": "let Source = DeltaLake.Contents(\"/lakehouse/default/gold/customer_sales\") in Source"
+          }
+        }
+      ],
+      "measures": [
+        {
+          "name": "Total Sales",
+          "expression": "SUM(customer_sales[total_sales])"
+        }
+      ]
+    }
+  ]
+}

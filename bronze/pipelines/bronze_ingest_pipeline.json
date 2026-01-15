@@ -1,0 +1,16 @@
+{
+  "name": "bronze_ingestion_pipeline",
+  "activities": [
+    {
+      "name": "CopyRawToLakehouse",
+      "type": "Copy",
+      "inputs": ["sample_raw_sales.csv"],
+      "outputs": ["Lakehouse/Files/raw/"]
+    },
+    {
+      "name": "RunBronzeNotebook",
+      "type": "Notebook",
+      "notebook": "bronze/notebooks/01_ingest_raw_sales.ipynb"
+    }
+  ]
+}

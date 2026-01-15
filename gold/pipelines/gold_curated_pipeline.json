@@ -1,0 +1,10 @@
+{
+  "name": "gold_curated_pipeline",
+  "activities": [
+    {
+      "name": "RunGoldNotebook",
+      "type": "Notebook",
+      "notebook": "gold/notebooks/03_curate_sales_mart.ipynb"
+    }
+  ]
+}
