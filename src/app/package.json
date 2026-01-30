@@ -1,0 +1,17 @@
+{
+  "name": "hello-world-app",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "NODE_ENV=test jest --runInBand"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "supertest": "^6.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node"
+  }
+}

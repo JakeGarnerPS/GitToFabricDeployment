@@ -1,0 +1,111 @@
+name: Deploy to Azure Web App
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./src/app
+        run: npm ci
+
+      - name: Run tests
+        working-directory: ./src/app
+        run: npm test
+
+  provision-infra:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    env:
+      RESOURCE_GROUP: my-app-rg
+      REGION: westeurope
+      APP_SERVICE_PLAN: my-app-plan
+      APP_SERVICE_SKU: B1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Create resource group
+        run: |
+          az group create -n $RESOURCE_GROUP -l $REGION
+
+      - name: Deploy Bicep template
+        env:
+          WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME || 'my-app' }}
+        run: |
+          TEMPLATE_PATH=infra/main.bicep
+          az deployment group create \
+            --resource-group $RESOURCE_GROUP \
+            --template-file $TEMPLATE_PATH \
+            --parameters webAppName="$WEBAPP_NAME" \
+                         location="$REGION" \
+                         appServicePlanName="$APP_SERVICE_PLAN" \
+                         skuName="$APP_SERVICE_SKU" \
+                         linuxFxVersion="NODE|18-lts" \
+                         environment="Development" \
+                         logLevel="Information" \
+                         port="8080"
+
+      - name: Output web app hostname
+        run: |
+          az webapp show -g $RESOURCE_GROUP -n ${{ secrets.AZURE_WEBAPP_NAME }} --query defaultHostName -o tsv || true
+
+  build-and-deploy:
+    if: github.event_name == 'push'
+    needs: [test, provision-infra]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./src/app
+        run: npm ci
+
+      - name: Archive app for deployment
+        run: |
+          cd src/app
+          zip -r ../../app.zip . -x node_modules/* .git/*
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          package: app.zip
+
+      - name: Clean up artifact
+        run: rm -f app.zip

@@ -1,0 +1,12 @@
+{
+  "name": "gold_sales_mart",
+  "description": "Curated sales mart ready for reporting",
+  "owner": "analytics-team",
+  "lastUpdated": "2026-01-30",
+  "inputs": [
+    { "dataset": "silver_clean_sales" }
+  ],
+  "models": [
+    { "file": "models/sales_mart/model.bim", "description": "Semantic model" }
+  ]
+}

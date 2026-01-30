@@ -1,5 +1,7 @@
 # Fabric Medallion Architecture Sample
 
+![Medallion Validation](https://github.com/JakeGarnerPS/GitToFabricDeployment/actions/workflows/validate.yml/badge.svg)
+
 This repository contains a complete Bronze → Silver → Gold medallion architecture template for Microsoft Fabric.
 
 ## Structure

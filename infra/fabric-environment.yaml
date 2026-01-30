@@ -1,0 +1,30 @@
+# infra/fabric-environment.yaml
+version: 1.0.0
+name: my-app-env
+type: environment
+
+metadata:
+  owner: your-name-or-team
+  description: Base environment for my-app using Fabric
+
+variables:
+  APP_ENV: Development
+  LOG_LEVEL: Information
+
+resources:
+  storage:
+    - name: app-storage
+      type: blob
+      provider: azure
+      sku: Standard_LRS
+
+  databases:
+    - name: app-db
+      type: postgres
+      provider: azure
+      version: "16"
+      sku: Basic
+
+services:
+  - name: app
+    deploymentFile: ./fabric-deployment.yaml

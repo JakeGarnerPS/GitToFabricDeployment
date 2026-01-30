@@ -1,0 +1,23 @@
+# fabric-launcher.yaml
+version: 1.0.0
+name: my-app-local
+environment: local
+
+services:
+  - name: app
+    project: ./src
+    language: auto
+    bindings:
+      - port: 8080
+        protocol: http
+        external: true
+    env:
+      - name: APP_ENV
+        value: Development
+
+runtime:
+  logs:
+    level: information
+  debugging:
+    enabled: true
+    port: 9229

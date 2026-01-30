@@ -1,0 +1,14 @@
+{
+  "name": "silver_clean_sales",
+  "description": "Cleansed sales data with normalized types and fixed quality issues",
+  "owner": "data-team",
+  "lastUpdated": "2026-01-30",
+  "inputs": [
+    { "dataset": "bronze_raw_sales" }
+  ],
+  "schema": [
+    { "name": "order_id", "type": "string" },
+    { "name": "amount", "type": "number" },
+    { "name": "order_date", "type": "date" }
+  ]
+}

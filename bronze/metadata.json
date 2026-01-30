@@ -1,0 +1,14 @@
+{
+  "name": "bronze_raw_sales",
+  "description": "Raw sales CSV files ingested as-is",
+  "owner": "data-team",
+  "lastUpdated": "2026-01-30",
+  "sources": [
+    { "path": "data/sample_raw_sales.csv", "format": "csv" }
+  ],
+  "schema": [
+    { "name": "order_id", "type": "string" },
+    { "name": "amount", "type": "number" },
+    { "name": "order_date", "type": "date" }
+  ]
+}

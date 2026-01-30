@@ -1,0 +1,27 @@
+# fabric-deployment.yaml
+version: 1.0.0
+name: my-app
+environment: dev
+
+services:
+  - name: app
+    project: ./src/app
+    language: auto
+    bindings:
+      - port: 8080
+        protocol: http
+    replicas: 1
+    resources:
+      cpu: "0.5"
+      memory: "512Mi"
+    env:
+      - name: APP_ENV
+        value: Development
+
+infrastructure:
+  provider: azure
+  resourceGroup: my-app-rg
+  region: westeurope
+  appService:
+    planName: my-app-plan
+    sku: B1
