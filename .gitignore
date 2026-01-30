@@ -1,0 +1,29 @@
+# Node
+node_modules/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+
+# Python
+__pycache__/
+
+# Temporary archives and build artifacts
+*.zip
+
+# Secrets / credentials
+sp.json
+publish-profile.xml
+*.publishsettings
+*.pem
+*.pfx
+.env
+.env.*
+
+# Fabric / Azure artifacts
+app.zip
+
+# Misc
+*.bak
