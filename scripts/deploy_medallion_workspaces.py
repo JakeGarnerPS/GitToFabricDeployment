@@ -17,6 +17,7 @@ For each workspace this script:
 
 import argparse
 import base64
+import copy
 import json
 import os
 import subprocess
@@ -25,6 +26,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
+from uuid import uuid4
 
 import requests
 
@@ -38,8 +40,17 @@ DEFAULT_NOTEBOOKS = [
     "02_clean_sales_data.ipynb",
     "03_curate_sales_mart.ipynb",
 ]
+DEFAULT_PIPELINES_BY_LAYER = {
+    "bronze": ["bronze/pipelines/bronze_ingest_pipeline.json"],
+    "silver": ["silver/pipelines/silver_transform_pipeline.json"],
+    "gold": ["gold/pipelines/gold_curated_pipeline.json"],
+}
 DEFAULT_PARAMS_FILE = "infra/medallion_workspace_params.json"
 DEFAULT_WORKSPACE_IDS_OUTPUT = "infra/workspace_ids.json"
+PLATFORM_SCHEMA_URL = (
+    "https://developer.microsoft.com/json-schemas/"
+    "fabric/gitIntegration/platformProperties/2.0.0/schema.json"
+)
 
 
 class FabricClient:
@@ -194,9 +205,42 @@ class FabricClient:
         response.raise_for_status()
         return response.json().get("value", [])
 
+    def list_pipelines(self, workspace_id: str) -> List[dict]:
+        endpoints = [
+            (
+                f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/dataPipelines",
+                None,
+            ),
+            (
+                f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/items",
+                {"type": "DataPipeline"},
+            ),
+        ]
+
+        for url, params in endpoints:
+            response = requests.get(url, headers=self.headers, params=params)
+            if response.status_code in (404, 405):
+                continue
+            response.raise_for_status()
+            return response.json().get("value", [])
+
+        return []
+
     def notebook_exists(self, workspace_id: str, display_name: str) -> bool:
         for notebook in self.list_notebooks(workspace_id):
             if notebook.get("displayName") == display_name:
+                return True
+        return False
+
+    def get_notebook_id(self, workspace_id: str, display_name: str) -> Optional[str]:
+        for notebook in self.list_notebooks(workspace_id):
+            if notebook.get("displayName") == display_name:
+                return notebook.get("id")
+        return None
+
+    def pipeline_exists(self, workspace_id: str, display_name: str) -> bool:
+        for pipeline in self.list_pipelines(workspace_id):
+            if pipeline.get("displayName") == display_name:
                 return True
         return False
 
@@ -221,6 +265,85 @@ class FabricClient:
         }
 
         response = requests.post(url, json=payload, headers=self.headers)
+
+        if response.status_code not in (200, 201, 202):
+            print(f"   API Response: {response.status_code}")
+            print(f"   Error: {response.text}")
+
+        if response.status_code == 400 and "ItemDisplayNameAlreadyInUse" in response.text:
+            return {"id": display_name, "displayName": display_name, "status": "exists"}
+
+        response.raise_for_status()
+
+        if response.status_code == 202:
+            return {"id": "pending", "displayName": display_name, "status": "pending"}
+
+        return response.json()
+
+    def create_pipeline(self, workspace_id: str, display_name: str, content: dict) -> dict:
+        pipeline_definition = normalize_pipeline_definition(content)
+        pipeline_json = json.dumps(pipeline_definition).encode("utf-8")
+        pipeline_b64 = base64.b64encode(pipeline_json).decode("utf-8")
+        platform_b64 = build_platform_payload_b64(display_name, "DataPipeline")
+
+        payload = {
+            "displayName": display_name,
+            "definition": {
+                "parts": [
+                    {
+                        "path": "pipeline-content.json",
+                        "payloadType": "InlineBase64",
+                        "payload": pipeline_b64,
+                    },
+                    {
+                        "path": ".platform",
+                        "payloadType": "InlineBase64",
+                        "payload": platform_b64,
+                    }
+                ],
+            },
+        }
+
+        endpoints = [f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/dataPipelines"]
+
+        last_status = None
+        last_error = ""
+
+        for url in endpoints:
+            response = requests.post(url, json=payload, headers=self.headers)
+            if response.status_code in (404, 405):
+                last_status = response.status_code
+                last_error = response.text
+                continue
+            if response.status_code == 400 and "ItemDisplayNameAlreadyInUse" in response.text:
+                return {"id": display_name, "displayName": display_name, "status": "exists"}
+            if response.status_code not in (200, 201, 202):
+                print(f"   API Response: {response.status_code}")
+                print(f"   Error: {response.text}")
+            response.raise_for_status()
+
+            if response.status_code == 202:
+                return {"id": "pending", "displayName": display_name, "status": "pending"}
+
+            return response.json()
+
+        raise RuntimeError(
+            "Unable to create pipeline with available Fabric endpoints. "
+            f"Last status: {last_status}, response: {last_error}"
+        )
+
+    def create_pipeline_shell(self, workspace_id: str, display_name: str, description: str = "") -> dict:
+        url = f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/items"
+        payload = {
+            "displayName": display_name,
+            "description": description,
+            "type": "DataPipeline",
+        }
+
+        response = requests.post(url, json=payload, headers=self.headers)
+
+        if response.status_code == 400 and "ItemDisplayNameAlreadyInUse" in response.text:
+            return {"id": display_name, "displayName": display_name, "status": "exists"}
 
         if response.status_code not in (200, 201, 202):
             print(f"   API Response: {response.status_code}")
@@ -275,8 +398,89 @@ def load_notebook_content(file_path: str) -> dict:
         return json.load(handle)
 
 
+def load_json_content(file_path: str) -> dict:
+    with open(file_path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def build_platform_payload_b64(display_name: str, item_type: str) -> str:
+    platform = {
+        "$schema": PLATFORM_SCHEMA_URL,
+        "metadata": {
+            "type": item_type,
+            "displayName": display_name,
+        },
+        "config": {
+            "version": "2.0",
+            "logicalId": str(uuid4()),
+        },
+    }
+    return base64.b64encode(json.dumps(platform).encode("utf-8")).decode("utf-8")
+
+
+def normalize_pipeline_definition(content: dict) -> dict:
+    if "properties" in content:
+        return content
+
+    properties = {"activities": []}
+    if content.get("description"):
+        properties["description"] = content["description"]
+
+    for activity in content.get("activities", []):
+        normalized_activity = dict(activity)
+        normalized_activity.setdefault("dependsOn", [])
+        properties["activities"].append(normalized_activity)
+
+    return {"properties": properties}
+
+
+def resolve_notebook_references(
+    content: dict,
+    workspace_id: str,
+    notebook_id_map: Dict[str, str],
+    client: "FabricClient",
+) -> dict:
+    """Replace notebookName placeholders in TridentNotebook activities with real Fabric IDs."""
+    content = copy.deepcopy(content)
+    if "properties" in content:
+        activities = content["properties"].get("activities", [])
+    else:
+        activities = content.get("activities", [])
+
+    for activity in activities:
+        if activity.get("type") == "TridentNotebook":
+            type_props = activity.setdefault("typeProperties", {})
+            notebook_name = type_props.pop("notebookName", None)
+            if notebook_name and "notebookId" not in type_props:
+                nb_id = notebook_id_map.get(notebook_name) or client.get_notebook_id(
+                    workspace_id, notebook_name
+                )
+                if nb_id:
+                    type_props["notebookId"] = nb_id
+                    type_props["workspaceId"] = workspace_id
+                else:
+                    print(
+                        f"   ⚠️ Could not resolve notebook ID for '{notebook_name}', "
+                        "pipeline activity may fail at runtime"
+                    )
+                    type_props["notebookName"] = notebook_name  # restore placeholder
+    return content
+
+
 def notebook_display_name(notebook_filename: str) -> str:
     return Path(notebook_filename).stem
+
+
+def pipeline_display_name(file_path: str, content: dict) -> str:
+    return content.get("name", Path(file_path).stem)
+
+
+def choose_existing_files(base_dir: str, candidates: List[str]) -> List[str]:
+    found = []
+    for relative_path in candidates:
+        if os.path.exists(os.path.join(base_dir, relative_path)):
+            found.append(relative_path)
+    return found
 
 
 def parse_csv_values(raw_values: str, label: str) -> List[str]:
@@ -392,6 +596,11 @@ def main() -> None:
         action="store_true",
         help="Skip notebook deployment when the notebook already exists",
     )
+    parser.add_argument(
+        "--skip-existing-pipelines",
+        action="store_true",
+        help="Skip pipeline deployment when the pipeline already exists",
+    )
 
     args = parser.parse_args()
 
@@ -435,6 +644,8 @@ def main() -> None:
     workspace_names = params.get("workspace_names", {})
     lakehouse_names = params.get("lakehouse_names", {})
     notebook_candidates = params.get("notebooks", DEFAULT_NOTEBOOKS)
+    pipelines_by_layer = dict(DEFAULT_PIPELINES_BY_LAYER)
+    pipelines_by_layer.update(params.get("pipelines_by_layer", {}))
     workspace_ids_output = (
         args.workspace_ids_output
         if args.workspace_ids_output is not None
@@ -467,6 +678,9 @@ def main() -> None:
         "notebooks_deployed": 0,
         "notebooks_skipped": 0,
         "notebooks_failed": 0,
+        "pipelines_deployed": 0,
+        "pipelines_skipped": 0,
+        "pipelines_failed": 0,
         "capacity_assignments_succeeded": 0,
         "capacity_assignments_failed": 0,
     }
@@ -502,7 +716,47 @@ def main() -> None:
                 summary["capacity_assignments_failed"] += 1
                 print(f"   ❌ Capacity assignment failed: {error}")
 
+        # ── Deploy notebooks first so IDs are available for pipeline resolution ──
+        notebook_id_map: Dict[str, str] = {}
+        notebook_files = choose_existing_notebooks(notebook_dir, notebook_candidates)
+
+        if not notebook_files:
+            print("   ⚠️ No notebooks found for deployment, skipping notebook deployment")
+        else:
+            print("\n📓 Deploying notebooks...")
+            for notebook_file in notebook_files:
+                notebook_path = os.path.join(notebook_dir, notebook_file)
+                display_name = notebook_display_name(notebook_file)
+
+                if args.skip_existing_notebooks and client.notebook_exists(workspace_id, display_name):
+                    print(f"   ⏭️ Notebook already exists, skipped: {display_name}")
+                    summary["notebooks_skipped"] += 1
+                    nb_id = client.get_notebook_id(workspace_id, display_name)
+                    if nb_id:
+                        notebook_id_map[display_name] = nb_id
+                    continue
+
+                print(f"   📝 Deploying notebook: {display_name}")
+                try:
+                    content = load_notebook_content(notebook_path)
+                    response = client.create_notebook(workspace_id, display_name, content)
+                    if response.get("status") == "exists":
+                        summary["notebooks_skipped"] += 1
+                        print("      ⏭️ Already exists, skipped")
+                        nb_id = client.get_notebook_id(workspace_id, display_name)
+                        if nb_id:
+                            notebook_id_map[display_name] = nb_id
+                    else:
+                        summary["notebooks_deployed"] += 1
+                        print("      ✅ Deployed")
+                        if response.get("id"):
+                            notebook_id_map[display_name] = response["id"]
+                except Exception as error:  # pylint: disable=broad-except
+                    summary["notebooks_failed"] += 1
+                    print(f"      ❌ Failed: {error}")
+
         workspace_lakehouses = []
+        workspace_pipelines = []
         for lakehouse_key in medallion_lakehouses:
             lakehouse_name = resolve_lakehouse_name(lakehouse_key, lakehouse_suffix, lakehouse_names)
             print(f"🏠 Ensuring lakehouse '{lakehouse_name}'...")
@@ -517,39 +771,77 @@ def main() -> None:
                 }
             )
 
+            pipeline_candidates = pipelines_by_layer.get(lakehouse_key, [])
+            pipeline_files = choose_existing_files(notebook_dir, pipeline_candidates)
+
+            for pipeline_file in pipeline_files:
+                pipeline_path = os.path.join(notebook_dir, pipeline_file)
+                pipeline_content = load_json_content(pipeline_path)
+                display_name = pipeline_display_name(pipeline_file, pipeline_content)
+                pipeline_content = resolve_notebook_references(
+                    pipeline_content, workspace_id, notebook_id_map, client
+                )
+
+                if args.skip_existing_pipelines and client.pipeline_exists(workspace_id, display_name):
+                    print(f"   ⏭️ Pipeline already exists, skipped: {display_name}")
+                    summary["pipelines_skipped"] += 1
+                    continue
+
+                print(f"🧩 Deploying pipeline: {display_name}")
+                try:
+                    response = client.create_pipeline(workspace_id, display_name, pipeline_content)
+                    workspace_pipelines.append(
+                        {
+                            "name": display_name,
+                            "id": response.get("id", display_name),
+                            "medallionLayer": lakehouse_key,
+                            "sourcePath": pipeline_file,
+                        }
+                    )
+                    if response.get("status") == "exists":
+                        summary["pipelines_skipped"] += 1
+                        print("   ⏭️ Pipeline already exists, skipped")
+                    else:
+                        summary["pipelines_deployed"] += 1
+                        print("   ✅ Pipeline deployed")
+                except Exception as error:  # pylint: disable=broad-except
+                    print(f"   ⚠️ Pipeline definition rejected, creating empty pipeline shell instead: {error}")
+                    try:
+                        shell_response = client.create_pipeline_shell(
+                            workspace_id,
+                            display_name,
+                            description=(
+                                "Created by deploy_medallion_workspaces.py. "
+                                "Source pipeline JSON could not be applied automatically."
+                            ),
+                        )
+                        workspace_pipelines.append(
+                            {
+                                "name": display_name,
+                                "id": shell_response.get("id", display_name),
+                                "medallionLayer": lakehouse_key,
+                                "sourcePath": pipeline_file,
+                            }
+                        )
+                        if shell_response.get("status") == "exists":
+                            summary["pipelines_skipped"] += 1
+                            print("   ⏭️ Pipeline already exists, skipped")
+                        else:
+                            summary["pipelines_deployed"] += 1
+                            print("   ✅ Empty pipeline shell created")
+                    except Exception as shell_error:  # pylint: disable=broad-except
+                        summary["pipelines_failed"] += 1
+                        print(f"   ❌ Pipeline deployment failed: {shell_error}")
+
         workspace_id_records.append(
             {
                 "environment": environment,
                 "workspaceName": workspace_name,
                 "workspaceId": workspace_id,
                 "lakehouses": workspace_lakehouses,
+                "pipelines": workspace_pipelines,
             }
         )
-
-        notebook_files = choose_existing_notebooks(notebook_dir, notebook_candidates)
-
-        if not notebook_files:
-            print("   ⚠️ No notebooks found for deployment, skipping notebook deployment")
-            continue
-
-        for notebook_file in notebook_files:
-            notebook_path = os.path.join(notebook_dir, notebook_file)
-            display_name = notebook_display_name(notebook_file)
-
-            if args.skip_existing_notebooks and client.notebook_exists(workspace_id, display_name):
-                print(f"   ⏭️ Notebook already exists, skipped: {display_name}")
-                summary["notebooks_skipped"] += 1
-                continue
-
-            print(f"   📝 Deploying notebook: {display_name}")
-            try:
-                content = load_notebook_content(notebook_path)
-                client.create_notebook(workspace_id, display_name, content)
-                summary["notebooks_deployed"] += 1
-                print("      ✅ Deployed")
-            except Exception as error:  # pylint: disable=broad-except
-                summary["notebooks_failed"] += 1
-                print(f"      ❌ Failed: {error}")
 
     workspace_ids_payload = {
         "generatedAtUtc": datetime.now(timezone.utc).isoformat(),
@@ -565,6 +857,9 @@ def main() -> None:
     print("=" * 72)
     print(f"Workspaces ready: {summary['workspaces_created_or_found']}")
     print(f"Lakehouses ready: {summary['lakehouses_created_or_found']}")
+    print(f"Pipelines deployed: {summary['pipelines_deployed']}")
+    print(f"Pipelines skipped: {summary['pipelines_skipped']}")
+    print(f"Pipelines failed: {summary['pipelines_failed']}")
     print(f"Notebooks deployed: {summary['notebooks_deployed']}")
     print(f"Notebooks skipped: {summary['notebooks_skipped']}")
     print(f"Notebooks failed: {summary['notebooks_failed']}")
@@ -572,7 +867,11 @@ def main() -> None:
         print(f"Capacity assignments succeeded: {summary['capacity_assignments_succeeded']}")
         print(f"Capacity assignments failed: {summary['capacity_assignments_failed']}")
 
-    if summary["notebooks_failed"] > 0 or summary["capacity_assignments_failed"] > 0:
+    if (
+        summary["notebooks_failed"] > 0
+        or summary["pipelines_failed"] > 0
+        or summary["capacity_assignments_failed"] > 0
+    ):
         sys.exit(1)
 
 

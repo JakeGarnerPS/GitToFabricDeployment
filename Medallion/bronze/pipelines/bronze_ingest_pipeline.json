@@ -1,16 +1,22 @@
 {
   "name": "bronze_ingestion_pipeline",
-  "activities": [
-    {
-      "name": "CopyRawToLakehouse",
-      "type": "Copy",
-      "inputs": ["sample_raw_sales.csv"],
-      "outputs": ["Lakehouse/Files/raw/"]
-    },
-    {
-      "name": "RunBronzeNotebook",
-      "type": "Notebook",
-      "notebook": "bronze/notebooks/01_ingest_raw_sales.ipynb"
-    }
-  ]
+  "properties": {
+    "activities": [
+      {
+        "name": "RunBronzeNotebook",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookName": "01_ingest_raw_sales"
+        }
+      }
+    ]
+  }
 }

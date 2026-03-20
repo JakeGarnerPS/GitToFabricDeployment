@@ -1,10 +1,22 @@
 {
   "name": "gold_curated_pipeline",
-  "activities": [
-    {
-      "name": "RunGoldNotebook",
-      "type": "Notebook",
-      "notebook": "gold/notebooks/03_curate_sales_mart.ipynb"
-    }
-  ]
+  "properties": {
+    "activities": [
+      {
+        "name": "RunGoldNotebook",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookName": "03_curate_sales_mart"
+        }
+      }
+    ]
+  }
 }

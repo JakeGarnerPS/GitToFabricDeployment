@@ -24,5 +24,16 @@
     "01_ingest_raw_sales.ipynb",
     "02_clean_sales_data.ipynb",
     "03_curate_sales_mart.ipynb"
-  ]
+  ],
+  "pipelines_by_layer": {
+    "bronze": [
+      "bronze/pipelines/bronze_ingest_pipeline.json"
+    ],
+    "silver": [
+      "silver/pipelines/silver_transform_pipeline.json"
+    ],
+    "gold": [
+      "gold/pipelines/gold_curated_pipeline.json"
+    ]
+  }
 }

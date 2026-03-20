@@ -15,6 +15,7 @@ Inside each workspace, the deployment creates these medallion lakehouses:
 - `gold_lakehouse`
 
 It also deploys the medallion notebooks from the `Medallion/` folder into each workspace.
+It can also deploy the Bronze, Silver, and Gold pipeline definitions from the `Medallion/` folder into each workspace.
 
 ## Prerequisites
 
@@ -57,6 +58,7 @@ You can customize:
 - Workspace names under `workspace_names`
 - Lakehouse names under `lakehouse_names`
 - Notebook files under `notebooks`
+- Pipeline files under `pipelines_by_layer`
 - Capacity assignment by setting `capacity_id`
 
 ## Step 3: Authenticate with Azure
@@ -79,6 +81,7 @@ This command will:
 - Read `infra/medallion_workspace_params.json`
 - Create or reuse the `dev`, `prod`, `feature`, and `staging` workspaces
 - Create or reuse the medallion lakehouses inside each workspace
+- Create the Bronze, Silver, and Gold pipelines inside each workspace
 - Deploy notebooks from `Medallion/`
 - Write workspace and lakehouse IDs to `infra/workspace_ids.json`
 
@@ -122,8 +125,9 @@ The script `scripts/deploy_medallion_workspaces.py` performs the following steps
 2. Creates or reuses each environment workspace
 3. Optionally assigns each workspace to the configured Fabric capacity
 4. Creates or reuses the medallion lakehouses in each workspace
-5. Uploads the notebook files to each workspace
-6. Writes a manifest file at `infra/workspace_ids.json`
+5. Creates the Bronze, Silver, and Gold pipelines in each workspace
+6. Uploads the notebook files to each workspace
+7. Writes a manifest file at `infra/workspace_ids.json`
 
 ## Output File
 
@@ -136,6 +140,7 @@ This file contains:
 - Workspace display name
 - Workspace ID
 - Lakehouse names and IDs for that workspace
+- Pipeline names and IDs for that workspace
 
 You can use this file for follow-up automation, including bulk capacity assignment.
 

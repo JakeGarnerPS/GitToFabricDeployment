@@ -1,5 +1,5 @@
 {
-  "generatedAtUtc": "2026-03-20T11:07:23.667937+00:00",
+  "generatedAtUtc": "2026-03-20T11:50:33.812105+00:00",
   "capacityId": "667C93CA-2177-448B-B39B-EA656D994404",
   "sourceParametersFile": "infra/medallion_workspace_params.json",
   "workspaces": [
@@ -28,6 +28,26 @@
           "id": "83bb4810-a6e7-445e-b3a6-4c153349bf48",
           "medallionLayer": "gold"
         }
+      ],
+      "pipelines": [
+        {
+          "name": "bronze_ingestion_pipeline",
+          "id": "016c6df4-fb5a-4845-ac17-4ceb86a26225",
+          "medallionLayer": "bronze",
+          "sourcePath": "bronze/pipelines/bronze_ingest_pipeline.json"
+        },
+        {
+          "name": "silver_transform_pipeline",
+          "id": "998bf4a8-7e18-4d74-8cd7-258351a4fd10",
+          "medallionLayer": "silver",
+          "sourcePath": "silver/pipelines/silver_transform_pipeline.json"
+        },
+        {
+          "name": "gold_curated_pipeline",
+          "id": "a5b29228-cae3-43ae-9bc0-fec5393fd9d1",
+          "medallionLayer": "gold",
+          "sourcePath": "gold/pipelines/gold_curated_pipeline.json"
+        }
       ]
     },
     {
@@ -54,6 +74,26 @@
           "name": "gold_lakehouse",
           "id": "aee8223b-9402-4260-9302-65be677d7755",
           "medallionLayer": "gold"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "bronze_ingestion_pipeline",
+          "id": "d7fa480a-1049-430f-802b-980a7f26debc",
+          "medallionLayer": "bronze",
+          "sourcePath": "bronze/pipelines/bronze_ingest_pipeline.json"
+        },
+        {
+          "name": "silver_transform_pipeline",
+          "id": "silver_transform_pipeline",
+          "medallionLayer": "silver",
+          "sourcePath": "silver/pipelines/silver_transform_pipeline.json"
+        },
+        {
+          "name": "gold_curated_pipeline",
+          "id": "gold_curated_pipeline",
+          "medallionLayer": "gold",
+          "sourcePath": "gold/pipelines/gold_curated_pipeline.json"
         }
       ]
     },
@@ -82,6 +122,26 @@
           "id": "82ef9874-6102-4d09-8a60-8923d3316de6",
           "medallionLayer": "gold"
         }
+      ],
+      "pipelines": [
+        {
+          "name": "bronze_ingestion_pipeline",
+          "id": "ef6e65dc-3fc7-43e7-8c70-7f4dd046d291",
+          "medallionLayer": "bronze",
+          "sourcePath": "bronze/pipelines/bronze_ingest_pipeline.json"
+        },
+        {
+          "name": "silver_transform_pipeline",
+          "id": "f215a06c-802f-4621-aad5-b175d189b328",
+          "medallionLayer": "silver",
+          "sourcePath": "silver/pipelines/silver_transform_pipeline.json"
+        },
+        {
+          "name": "gold_curated_pipeline",
+          "id": "bc6a9f4c-36c0-4d50-bbe5-0d6edac5573e",
+          "medallionLayer": "gold",
+          "sourcePath": "gold/pipelines/gold_curated_pipeline.json"
+        }
       ]
     },
     {
@@ -108,6 +168,26 @@
           "name": "gold_lakehouse",
           "id": "6e1e2d55-39ee-44b5-a043-646f7e1707f0",
           "medallionLayer": "gold"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "bronze_ingestion_pipeline",
+          "id": "cd0a51a8-501c-4d5c-9d79-cec76b228619",
+          "medallionLayer": "bronze",
+          "sourcePath": "bronze/pipelines/bronze_ingest_pipeline.json"
+        },
+        {
+          "name": "silver_transform_pipeline",
+          "id": "silver_transform_pipeline",
+          "medallionLayer": "silver",
+          "sourcePath": "silver/pipelines/silver_transform_pipeline.json"
+        },
+        {
+          "name": "gold_curated_pipeline",
+          "id": "gold_curated_pipeline",
+          "medallionLayer": "gold",
+          "sourcePath": "gold/pipelines/gold_curated_pipeline.json"
         }
       ]
     }

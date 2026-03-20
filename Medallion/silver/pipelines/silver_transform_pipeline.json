@@ -1,10 +1,22 @@
 {
   "name": "silver_transform_pipeline",
-  "activities": [
-    {
-      "name": "RunSilverNotebook",
-      "type": "Notebook",
-      "notebook": "silver/notebooks/02_clean_sales_data.ipynb"
-    }
-  ]
+  "properties": {
+    "activities": [
+      {
+        "name": "RunSilverNotebook",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookName": "02_clean_sales_data"
+        }
+      }
+    ]
+  }
 }
