@@ -8,6 +8,7 @@ Quick mapping:
 - `gold/` → curated datasets, models and reporting artifacts
 
 How to connect:
+1. In Gitub create a PAT (Personal access token) with read/write
 1. In Microsoft Fabric, open your Workspace and select **Git integration** (or **Connect** → **Git**).
 2. Choose **GitHub** and connect using your GitHub account or organization.
 3. Select this repository (`JakeGarnerPS/GitToFabricDeployment`) and the branch `main` (or pick a dedicated branch).

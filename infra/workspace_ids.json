@@ -1,0 +1,115 @@
+{
+  "generatedAtUtc": "2026-03-20T11:07:23.667937+00:00",
+  "capacityId": "667C93CA-2177-448B-B39B-EA656D994404",
+  "sourceParametersFile": "infra/medallion_workspace_params.json",
+  "workspaces": [
+    {
+      "environment": "dev",
+      "workspaceName": "medallion-dev",
+      "workspaceId": "bafe69f9-6a07-4f62-a1bc-de1fef9e9086",
+      "lakehouses": [
+        {
+          "name": "raw_lakehouse",
+          "id": "d1da7399-0b88-460e-98a8-a4f84c9d54c8",
+          "medallionLayer": "raw"
+        },
+        {
+          "name": "bronze_lakehouse",
+          "id": "468c2a4f-43de-458c-97da-0f4f71fe3480",
+          "medallionLayer": "bronze"
+        },
+        {
+          "name": "silver_lakehouse",
+          "id": "ab886043-371e-4845-964c-e332188cc692",
+          "medallionLayer": "silver"
+        },
+        {
+          "name": "gold_lakehouse",
+          "id": "83bb4810-a6e7-445e-b3a6-4c153349bf48",
+          "medallionLayer": "gold"
+        }
+      ]
+    },
+    {
+      "environment": "prod",
+      "workspaceName": "medallion-prod",
+      "workspaceId": "dd730aed-d329-43d0-b268-7ad6753df04f",
+      "lakehouses": [
+        {
+          "name": "raw_lakehouse",
+          "id": "e37a23fe-0742-4f42-bfc9-ef40ccbecd03",
+          "medallionLayer": "raw"
+        },
+        {
+          "name": "bronze_lakehouse",
+          "id": "d041be19-5410-40e7-bf48-7f44187d8d4a",
+          "medallionLayer": "bronze"
+        },
+        {
+          "name": "silver_lakehouse",
+          "id": "3e77d565-9279-49e4-890a-78c0c873a9d3",
+          "medallionLayer": "silver"
+        },
+        {
+          "name": "gold_lakehouse",
+          "id": "aee8223b-9402-4260-9302-65be677d7755",
+          "medallionLayer": "gold"
+        }
+      ]
+    },
+    {
+      "environment": "feature",
+      "workspaceName": "medallion-feature",
+      "workspaceId": "1d9aeb3a-de3d-4124-85d0-999ec07dc670",
+      "lakehouses": [
+        {
+          "name": "raw_lakehouse",
+          "id": "7fb523a7-fb2c-4019-a6c3-fe351885ab8e",
+          "medallionLayer": "raw"
+        },
+        {
+          "name": "bronze_lakehouse",
+          "id": "71fa4859-b1bd-4348-9f09-bcb7becd03fd",
+          "medallionLayer": "bronze"
+        },
+        {
+          "name": "silver_lakehouse",
+          "id": "9b1a34c1-2406-4884-aefd-a43a28930416",
+          "medallionLayer": "silver"
+        },
+        {
+          "name": "gold_lakehouse",
+          "id": "82ef9874-6102-4d09-8a60-8923d3316de6",
+          "medallionLayer": "gold"
+        }
+      ]
+    },
+    {
+      "environment": "staging",
+      "workspaceName": "medallion-staging",
+      "workspaceId": "2c426274-9d14-4636-85d6-d3f68044e104",
+      "lakehouses": [
+        {
+          "name": "raw_lakehouse",
+          "id": "30cd967e-f95e-4035-a9f1-fdf896901937",
+          "medallionLayer": "raw"
+        },
+        {
+          "name": "bronze_lakehouse",
+          "id": "415024aa-903a-4c60-a225-494f25155506",
+          "medallionLayer": "bronze"
+        },
+        {
+          "name": "silver_lakehouse",
+          "id": "a413b6d0-6819-4b91-8494-d113b0d6f870",
+          "medallionLayer": "silver"
+        },
+        {
+          "name": "gold_lakehouse",
+          "id": "6e1e2d55-39ee-44b5-a043-646f7e1707f0",
+          "medallionLayer": "gold"
+        }
+      ]
+    }
+  ]
+}

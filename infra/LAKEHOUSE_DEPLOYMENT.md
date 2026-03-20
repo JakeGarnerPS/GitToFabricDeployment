@@ -54,7 +54,7 @@ Run the deployment script with automatic token retrieval:
 
 ```bash
 python scripts/deploy_lakehouse.py \
-  --workspace-id 7eb1a274-c608-4211-9bfc-3127ac351715 \
+  --workspace-id d6eafb7c-4901-4abd-b0fa-8d1a1234b583 \
   --token $(az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken -o tsv)
 ```
 
