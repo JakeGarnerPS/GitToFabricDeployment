@@ -77,6 +77,8 @@ This signs you in and allows the scripts to retrieve a Fabric API token.
 python scripts/deploy_medallion_workspaces.py --interactive
 ```
 
+This uses `--workspace all` by default.
+
 This command will:
 - Read `infra/medallion_workspace_params.json`
 - Create or reuse the `dev`, `prod`, `feature`, and `staging` workspaces
@@ -100,6 +102,38 @@ python scripts/deploy_medallion_workspaces.py \
   --interactive \
   --params-file infra/medallion_workspace_params.json
 ```
+
+### Deploy to a Specific Workspace
+
+Use the `--workspace` selector to target one environment or all environments.
+
+Deploy only `dev`:
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --workspace dev
+```
+
+Deploy only `prod`:
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --workspace prod
+```
+
+Deploy all configured environments:
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --workspace all
+```
+
+Notes:
+- `--workspace all` deploys every environment listed in `environments` from the params file (or `--environments` if provided).
+- Valid values are `dev`, `prod`, `feature`, `staging`, and `all`.
 
 ### Override Capacity at Runtime
 

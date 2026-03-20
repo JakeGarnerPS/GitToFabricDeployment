@@ -533,6 +533,11 @@ def main() -> None:
         epilog=(
             "Examples:\n"
             "  python scripts/deploy_medallion_workspaces.py --interactive\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace dev\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace prod\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace staging\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace feature\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace all\n"
             "  python scripts/deploy_medallion_workspaces.py --token <token> --params-file infra/medallion_workspace_params.json\n"
             "  python scripts/deploy_medallion_workspaces.py --environments dev,prod,feature,staging --capacity-id <id>"
         ),
@@ -556,6 +561,15 @@ def main() -> None:
         "--environments",
         default=None,
         help="Comma-separated workspaces to create (default: dev,prod,feature,staging)",
+    )
+    parser.add_argument(
+        "--workspace",
+        choices=["dev", "prod", "staging", "feature", "all"],
+        default="all",
+        help=(
+            "Quick workspace selector. Use 'dev' or 'prod' to deploy to one workspace, "
+            "or 'all' to deploy all environments from --environments/params file (default: all)."
+        ),
     )
     parser.add_argument(
         "--medallion-lakehouses",
@@ -658,6 +672,15 @@ def main() -> None:
     except ValueError as error:
         print(f"❌ {error}")
         sys.exit(1)
+
+    if args.workspace != "all":
+        if args.workspace not in environments:
+            print(
+                f"⚠️ Workspace '{args.workspace}' was selected but is not present in environments: "
+                f"{', '.join(environments)}"
+            )
+            print("   Proceeding with selected workspace only.")
+        environments = [args.workspace]
 
     if not os.path.isdir(notebook_dir):
         print(f"❌ Notebook directory not found: {notebook_dir}")
