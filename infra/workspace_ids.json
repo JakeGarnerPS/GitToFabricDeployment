@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
   "generatedAtUtc": "2026-03-26T14:41:48.391157+00:00",
+=======
+  "generatedAtUtc": "2026-03-26T12:02:22.228666+00:00",
+>>>>>>> 6a417b3d160c6a3d8200f0a62f2740b581851691
   "capacityId": "667C93CA-2177-448B-B39B-EA656D994404",
   "sourceParametersFile": "infra/medallion_workspace_params.json",
   "workspaces": [
@@ -32,19 +36,19 @@
       "pipelines": [
         {
           "name": "bronze_ingestion_pipeline",
-          "id": "bronze_ingestion_pipeline",
+          "id": "11aab6fd-8016-4bb5-af42-94ed2f525469",
           "medallionLayer": "bronze",
           "sourcePath": "bronze/pipelines/bronze_ingest_pipeline.json"
         },
         {
           "name": "silver_transform_pipeline",
-          "id": "silver_transform_pipeline",
+          "id": "c0d2c5e8-7ced-4b44-9703-5ab2603f032d",
           "medallionLayer": "silver",
           "sourcePath": "silver/pipelines/silver_transform_pipeline.json"
         },
         {
           "name": "gold_curated_pipeline",
-          "id": "gold_curated_pipeline",
+          "id": "0b46b02f-766b-498d-b1bb-86557e0f65ba",
           "medallionLayer": "gold",
           "sourcePath": "gold/pipelines/gold_curated_pipeline.json"
         }

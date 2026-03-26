@@ -84,6 +84,7 @@ This command will:
 - Create or reuse the `dev`, `prod`, `feature`, and `staging` workspaces
 - Create or reuse the medallion lakehouses inside each workspace
 - Create the Bronze, Silver, and Gold pipelines inside each workspace
+- Replace existing notebooks and pipelines when the source artifact has been redeployed
 - Deploy notebooks from `Medallion/`
 - Write workspace and lakehouse IDs to `infra/workspace_ids.json`
 
@@ -151,6 +152,16 @@ python scripts/deploy_medallion_workspaces.py \
   --skip-existing-notebooks
 ```
 
+### Skip Pipeline Re-deployment
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --skip-existing-pipelines
+```
+
+By default, rerunning the deployment script replaces notebooks and pipelines that already exist in the target workspace. Use the skip flags when you want create-only behavior.
+
 ## What the Deployment Script Does
 
 The script `scripts/deploy_medallion_workspaces.py` performs the following steps:
@@ -159,8 +170,8 @@ The script `scripts/deploy_medallion_workspaces.py` performs the following steps
 2. Creates or reuses each environment workspace
 3. Optionally assigns each workspace to the configured Fabric capacity
 4. Creates or reuses the medallion lakehouses in each workspace
-5. Creates the Bronze, Silver, and Gold pipelines in each workspace
-6. Uploads the notebook files to each workspace
+5. Creates or replaces the Bronze, Silver, and Gold pipelines in each workspace
+6. Uploads or replaces the notebook files in each workspace
 7. Writes a manifest file at `infra/workspace_ids.json`
 
 ## Output File
