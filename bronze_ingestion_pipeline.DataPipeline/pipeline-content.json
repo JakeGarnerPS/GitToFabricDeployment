@@ -2,20 +2,20 @@
   "properties": {
     "activities": [
       {
-        "name": "RunBronzeNotebook",
         "type": "TridentNotebook",
-        "dependsOn": [],
+        "typeProperties": {
+          "notebookId": "d0a64e80-1dcc-8730-4109-9ff1ffe87e05",
+          "workspaceId": "00000000-0000-0000-0000-000000000000"
+        },
         "policy": {
           "timeout": "0.12:00:00",
           "retry": 0,
           "retryIntervalInSeconds": 30,
-          "secureOutput": false,
-          "secureInput": false
+          "secureInput": false,
+          "secureOutput": false
         },
-        "typeProperties": {
-          "notebookId": "pending",
-          "workspaceId": "1d9aeb3a-de3d-4124-85d0-999ec07dc670"
-        }
+        "name": "RunBronzeNotebook",
+        "dependsOn": []
       }
     ]
   }
