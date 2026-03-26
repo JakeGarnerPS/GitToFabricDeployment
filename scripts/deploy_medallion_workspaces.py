@@ -51,6 +51,7 @@ PLATFORM_SCHEMA_URL = (
     "https://developer.microsoft.com/json-schemas/"
     "fabric/gitIntegration/platformProperties/2.0.0/schema.json"
 )
+ITEM_NAME_RETRYABLE_ERROR = "ItemDisplayNameNotAvailableYet"
 
 
 class FabricClient:
@@ -238,11 +239,69 @@ class FabricClient:
                 return notebook.get("id")
         return None
 
+    def get_pipeline_id(self, workspace_id: str, display_name: str) -> Optional[str]:
+        for pipeline in self.list_pipelines(workspace_id):
+            if pipeline.get("displayName") == display_name:
+                return pipeline.get("id")
+        return None
+
     def pipeline_exists(self, workspace_id: str, display_name: str) -> bool:
         for pipeline in self.list_pipelines(workspace_id):
             if pipeline.get("displayName") == display_name:
                 return True
         return False
+
+    def delete_notebook(self, workspace_id: str, notebook_id: str) -> None:
+        endpoints = [
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/notebooks/{notebook_id}",
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/items/{notebook_id}",
+        ]
+
+        last_status = None
+        last_error = ""
+
+        for url in endpoints:
+            response = requests.delete(url, headers=self.headers)
+            if response.status_code in (404, 405):
+                last_status = response.status_code
+                last_error = response.text
+                continue
+            if response.status_code not in (200, 202, 204):
+                print(f"   API Response: {response.status_code}")
+                print(f"   Error: {response.text}")
+            response.raise_for_status()
+            return
+
+        raise RuntimeError(
+            "Unable to delete notebook with available Fabric endpoints. "
+            f"Last status: {last_status}, response: {last_error}"
+        )
+
+    def delete_pipeline(self, workspace_id: str, pipeline_id: str) -> None:
+        endpoints = [
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/dataPipelines/{pipeline_id}",
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/items/{pipeline_id}",
+        ]
+
+        last_status = None
+        last_error = ""
+
+        for url in endpoints:
+            response = requests.delete(url, headers=self.headers)
+            if response.status_code in (404, 405):
+                last_status = response.status_code
+                last_error = response.text
+                continue
+            if response.status_code not in (200, 202, 204):
+                print(f"   API Response: {response.status_code}")
+                print(f"   Error: {response.text}")
+            response.raise_for_status()
+            return
+
+        raise RuntimeError(
+            "Unable to delete pipeline with available Fabric endpoints. "
+            f"Last status: {last_status}, response: {last_error}"
+        )
 
     def create_notebook(self, workspace_id: str, display_name: str, content: dict) -> dict:
         url = f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/notebooks"
@@ -416,6 +475,46 @@ def build_platform_payload_b64(display_name: str, item_type: str) -> str:
         },
     }
     return base64.b64encode(json.dumps(platform).encode("utf-8")).decode("utf-8")
+
+
+def is_retryable_name_lock_error(error: Exception) -> bool:
+    if not isinstance(error, requests.HTTPError):
+        return False
+
+    response = error.response
+    if response is None or response.status_code != 400:
+        return False
+
+    return ITEM_NAME_RETRYABLE_ERROR in response.text
+
+
+def retry_create_after_delete(create_operation, display_name: str, item_kind: str) -> dict:
+    retry_delays = [5, 10, 20, 30]
+    last_error = None
+
+    for attempt_index, delay_seconds in enumerate([0] + retry_delays, start=1):
+        if delay_seconds:
+            print(
+                f"   ⏳ Waiting {delay_seconds}s for deleted {item_kind} name '{display_name}' "
+                "to become available"
+            )
+            time.sleep(delay_seconds)
+
+        try:
+            return create_operation()
+        except Exception as error:  # pylint: disable=broad-except
+            if not is_retryable_name_lock_error(error):
+                raise
+            last_error = error
+            print(
+                f"   ⚠️ Fabric has not released the deleted {item_kind} name '{display_name}' yet "
+                f"(attempt {attempt_index}/{len(retry_delays) + 1})"
+            )
+
+    if last_error is not None:
+        raise last_error
+
+    raise RuntimeError(f"Failed to create {item_kind} '{display_name}' after retries.")
 
 
 def normalize_pipeline_definition(content: dict) -> dict:
@@ -762,7 +861,15 @@ def main() -> None:
                 print(f"   📝 Deploying notebook: {display_name}")
                 try:
                     content = load_notebook_content(notebook_path)
-                    response = client.create_notebook(workspace_id, display_name, content)
+                    existing_notebook_id = client.get_notebook_id(workspace_id, display_name)
+                    if existing_notebook_id:
+                        print("      ♻️ Existing notebook found, replacing")
+                        client.delete_notebook(workspace_id, existing_notebook_id)
+                    response = retry_create_after_delete(
+                        lambda: client.create_notebook(workspace_id, display_name, content),
+                        display_name,
+                        "notebook",
+                    )
                     if response.get("status") == "exists":
                         summary["notebooks_skipped"] += 1
                         print("      ⏭️ Already exists, skipped")
@@ -812,7 +919,15 @@ def main() -> None:
 
                 print(f"🧩 Deploying pipeline: {display_name}")
                 try:
-                    response = client.create_pipeline(workspace_id, display_name, pipeline_content)
+                    existing_pipeline_id = client.get_pipeline_id(workspace_id, display_name)
+                    if existing_pipeline_id:
+                        print("   ♻️ Existing pipeline found, replacing")
+                        client.delete_pipeline(workspace_id, existing_pipeline_id)
+                    response = retry_create_after_delete(
+                        lambda: client.create_pipeline(workspace_id, display_name, pipeline_content),
+                        display_name,
+                        "pipeline",
+                    )
                     workspace_pipelines.append(
                         {
                             "name": display_name,
