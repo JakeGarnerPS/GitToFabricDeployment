@@ -16,9 +16,10 @@ from typing import Optional
 # Configuration
 FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1"
 NOTEBOOKS = [
-    "01_ingest_raw_sales.ipynb",
-    "02_clean_sales_data.ipynb",
-    "03_curate_sales_mart.ipynb"
+    "Bronze/Notebooks/01_ingest_raw_sales.ipynb",
+    "Bronze/Notebooks/01_ingest_raw_sales_python.ipynb",
+    "Silver/Notebooks/02_clean_sales_data.ipynb",
+    "Gold/Notebooks/03_curate_sales_mart.ipynb"
 ]
 
 
@@ -84,6 +85,55 @@ class FabricClient:
             return {"id": name, "displayName": name, "status": "pending"}
         
         return response.json()
+
+    def update_notebook(self, notebook_id: str, content: dict) -> dict:
+        """Update an existing notebook definition in-place."""
+        notebook_json = json.dumps(content).encode('utf-8')
+        notebook_b64 = base64.b64encode(notebook_json).decode('utf-8')
+
+        payload = {
+            "definition": {
+                "format": "ipynb",
+                "parts": [
+                    {
+                        "path": "notebook-content.ipynb",
+                        "payloadType": "InlineBase64",
+                        "payload": notebook_b64
+                    }
+                ]
+            }
+        }
+
+        endpoints = [
+            f"{FABRIC_API_BASE_URL}/workspaces/{self.workspace_id}/notebooks/{notebook_id}/updateDefinition",
+            f"{FABRIC_API_BASE_URL}/workspaces/{self.workspace_id}/items/{notebook_id}/updateDefinition",
+        ]
+
+        last_status = None
+        last_error = ""
+
+        for url in endpoints:
+            response = requests.post(url, json=payload, headers=self.headers)
+            if response.status_code in (404, 405):
+                last_status = response.status_code
+                last_error = response.text
+                continue
+
+            if response.status_code not in (200, 201, 202):
+                print(f"   API Response: {response.status_code}")
+                print(f"   Error: {response.text}")
+
+            response.raise_for_status()
+
+            if response.status_code == 202:
+                return {"id": notebook_id, "status": "pending"}
+
+            return response.json() if response.text else {"id": notebook_id, "status": "updated"}
+
+        raise RuntimeError(
+            "Unable to update notebook definition with available Fabric endpoints. "
+            f"Last status: {last_status}, response: {last_error}"
+        )
     
     def get_notebooks(self) -> list:
         """
@@ -221,18 +271,25 @@ Examples:
                 skipped += 1
                 continue
             else:
-                print(f"   ⚠️  Notebook already exists, will attempt to update")
+                print(f"   ⚠️  Notebook already exists, updating in place")
         
         try:
             # Load notebook content
             content = load_notebook_content(notebook_path)
             
-            # Create notebook in Fabric
-            response = client.create_notebook(display_name, content)
-            notebook_id = response.get("id")
-            
-            print(f"   ✅ Deployed successfully")
-            print(f"      Notebook ID: {notebook_id}")
+            # Update existing notebook or create new one
+            if display_name in existing:
+                notebook_id = existing[display_name].get("id")
+                response = client.update_notebook(notebook_id, content)
+                print(f"   ✅ Updated successfully")
+                if response.get("status") == "pending":
+                    print(f"      Update status: pending")
+                print(f"      Notebook ID: {notebook_id}")
+            else:
+                response = client.create_notebook(display_name, content)
+                notebook_id = response.get("id")
+                print(f"   ✅ Deployed successfully")
+                print(f"      Notebook ID: {notebook_id}")
             deployed += 1
             
         except FileNotFoundError as e:

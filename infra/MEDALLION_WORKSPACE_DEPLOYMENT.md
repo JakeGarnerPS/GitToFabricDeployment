@@ -2,7 +2,31 @@
 
 This guide explains how to deploy the environment-based Fabric setup in this repository using the automation scripts.
 
-The deployment creates these workspaces by default:
+## Repository Structure
+
+The repository uses a multi-tier architecture with consolidated assets per tier:
+
+```
+Bronze/
+  Lakehouses/         # Raw and bronze Fabric lakehouse assets
+  DataPipelines/      # Bronze Fabric datapipeline asset
+  Notebooks/          # Shared ingestion notebooks
+  Pipelines/          # Bronze tier JSON pipeline definition
+
+Silver/
+  Lakehouses/         # Silver Fabric lakehouse asset
+  DataPipelines/      # Silver Fabric datapipeline asset
+  Notebooks/          # Shared transformation notebooks
+  Pipelines/          # Silver tier JSON pipeline definition
+
+Gold/
+  Lakehouses/         # Gold Fabric lakehouse asset
+  DataPipelines/      # Gold Fabric datapipeline asset
+  Notebooks/          # Shared curation notebooks
+  Pipelines/          # Gold tier JSON pipeline definition
+```
+
+The deployment creates these Fabric workspaces by default:
 - `dev`
 - `prod`
 - `feature`
@@ -14,8 +38,13 @@ Inside each workspace, the deployment creates these medallion lakehouses:
 - `silver_lakehouse`
 - `gold_lakehouse`
 
-It also deploys the medallion notebooks from the `Medallion/` folder into each workspace.
-It can also deploy the Bronze, Silver, and Gold pipeline definitions from the `Medallion/` folder into each workspace.
+It deploys the medallion notebooks from the `Bronze/Notebooks/`, `Silver/Notebooks/`, and `Gold/Notebooks/` folders into each workspace.
+It also deploys pipeline definitions from `Bronze/Pipelines/`, `Silver/Pipelines/`, and `Gold/Pipelines/`.
+
+The repository also keeps the corresponding Fabric artifact folders under each tier:
+- `Bronze/Lakehouses/` and `Bronze/DataPipelines/`
+- `Silver/Lakehouses/` and `Silver/DataPipelines/`
+- `Gold/Lakehouses/` and `Gold/DataPipelines/`
 
 ## Prerequisites
 
@@ -48,13 +77,17 @@ Default values:
   "medallion_lakehouses": "raw,bronze,silver,gold",
   "capacity_id": null,
   "workspace_description": "Managed by deploy_medallion_workspaces.py",
-  "notebook_dir": "Medallion",
+  "notebook_dir": ".",
   "lakehouse_suffix": "lakehouse",
   "workspace_ids_output": "infra/workspace_ids.json"
 }
 ```
 
-You can customize:
+Key settings:
+- `environments` - Fabric workspaces to create/deploy to (e.g., dev, prod, feature, staging)
+- `notebook_dir` - Base directory containing the `Bronze/`, `Silver/`, and `Gold/` notebook folders
+
+You can further customize:
 - Workspace names under `workspace_names`
 - Lakehouse names under `lakehouse_names`
 - Notebook files under `notebooks`
@@ -83,9 +116,10 @@ This command will:
 - Read `infra/medallion_workspace_params.json`
 - Create or reuse the `dev`, `prod`, `feature`, and `staging` workspaces
 - Create or reuse the medallion lakehouses inside each workspace
-- Create the Bronze, Silver, and Gold pipelines inside each workspace
-- Replace existing notebooks and pipelines when the source artifact has been redeployed
-- Deploy notebooks from `Medallion/`
+- Deploy all pipelines into each workspace
+- Update existing notebooks in place (copy latest code/JSON definition without deleting the notebook item)
+- Replace existing pipelines when the source artifact has been redeployed
+- Deploy notebooks from `Bronze/Notebooks/`, `Silver/Notebooks/`, and `Gold/Notebooks/`
 - Write workspace and lakehouse IDs to `infra/workspace_ids.json`
 
 ### Run with Explicit Token
@@ -118,12 +152,6 @@ python scripts/deploy_medallion_workspaces.py \
 
 Deploy only `prod`:
 
-```bash
-python scripts/deploy_medallion_workspaces.py \
-  --interactive \
-  --workspace prod
-```
-
 Deploy all configured environments:
 
 ```bash
@@ -152,6 +180,32 @@ python scripts/deploy_medallion_workspaces.py \
   --skip-existing-notebooks
 ```
 
+### Notebook Update Behavior (Examples)
+
+By default, notebook deployment is **upsert** behavior:
+- If the notebook does not exist in the target workspace, it is created.
+- If the notebook already exists, its definition is updated in place using Fabric `updateDefinition`.
+
+This means rerunning deployment to `dev` copies the latest notebook code from the tier notebook folders into the existing `dev` notebook item without deleting it.
+
+Deploy to `dev` and update notebook content in place:
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --workspace dev \
+  --skip-existing-pipelines
+```
+
+Create-only notebook behavior (do not update existing notebooks):
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --workspace dev \
+  --skip-existing-notebooks
+```
+
 ### Skip Pipeline Re-deployment
 
 ```bash
@@ -160,7 +214,7 @@ python scripts/deploy_medallion_workspaces.py \
   --skip-existing-pipelines
 ```
 
-By default, rerunning the deployment script replaces notebooks and pipelines that already exist in the target workspace. Use the skip flags when you want create-only behavior.
+By default, rerunning the deployment script updates notebooks in place and replaces existing pipelines in the target workspace. Use the skip flags when you want create-only behavior.
 
 ## What the Deployment Script Does
 
@@ -171,7 +225,7 @@ The script `scripts/deploy_medallion_workspaces.py` performs the following steps
 3. Optionally assigns each workspace to the configured Fabric capacity
 4. Creates or reuses the medallion lakehouses in each workspace
 5. Creates or replaces the Bronze, Silver, and Gold pipelines in each workspace
-6. Uploads or replaces the notebook files in each workspace
+6. Uploads notebook files or updates existing notebook definitions in place in each workspace
 7. Writes a manifest file at `infra/workspace_ids.json`
 
 ## Output File
@@ -256,9 +310,11 @@ For each workspace (`dev`, `prod`, `feature`, `staging`):
 
 ### Notebook Deployment Fails
 
-- Verify the notebook directory exists at `Medallion/`
+- Verify the notebook base directory exists and contains `Bronze/Notebooks/`, `Silver/Notebooks/`, and `Gold/Notebooks/`
 - Ensure the `.ipynb` files listed in `notebooks` exist
 - Check for invalid notebook JSON or unsupported content
+- If an update call fails in your tenant, rerun once after a short delay (newly created items can be briefly unavailable)
+- Confirm your identity has permissions to update notebook definitions in the target workspace
 
 ### Capacity Assignment Fails
 

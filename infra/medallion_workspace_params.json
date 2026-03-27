@@ -4,7 +4,7 @@
   "medallion_lakehouses": "raw,bronze,silver,gold",
   "capacity_id": "667C93CA-2177-448B-B39B-EA656D994404",
   "workspace_description": "Managed by deploy_medallion_workspaces.py",
-  "notebook_dir": "Medallion",
+  "notebook_dir": ".",
   "lakehouse_suffix": "lakehouse",
   "workspace_ids_output": "infra/workspace_ids.json",
   "workspace_names": {
@@ -20,20 +20,20 @@
     "gold": "gold_lakehouse"
   },
   "notebooks": [
-    "01_ingest_raw_sales_python.ipynb",
-    "01_ingest_raw_sales.ipynb",
-    "02_clean_sales_data.ipynb",
-    "03_curate_sales_mart.ipynb"
+    "Bronze/Notebooks/01_ingest_raw_sales_python.ipynb",
+    "Bronze/Notebooks/01_ingest_raw_sales.ipynb",
+    "Silver/Notebooks/02_clean_sales_data.ipynb",
+    "Gold/Notebooks/03_curate_sales_mart.ipynb"
   ],
   "pipelines_by_layer": {
     "bronze": [
-      "bronze/pipelines/bronze_ingest_pipeline.json"
+      "Bronze/Pipelines/bronze_ingest_pipeline.json"
     ],
     "silver": [
-      "silver/pipelines/silver_transform_pipeline.json"
+      "Silver/Pipelines/silver_transform_pipeline.json"
     ],
     "gold": [
-      "gold/pipelines/gold_curated_pipeline.json"
+      "Gold/Pipelines/gold_curated_pipeline.json"
     ]
   }
 }

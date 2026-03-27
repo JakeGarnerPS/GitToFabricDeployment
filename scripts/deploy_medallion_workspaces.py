@@ -35,15 +35,17 @@ FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1"
 DEFAULT_ENVIRONMENTS = ["dev", "prod", "feature", "staging"]
 DEFAULT_MEDALLION_LAKEHOUSES = ["raw", "bronze", "silver", "gold"]
 DEFAULT_NOTEBOOKS = [
-    "01_ingest_raw_sales_python.ipynb",
-    "01_ingest_raw_sales.ipynb",
-    "02_clean_sales_data.ipynb",
-    "03_curate_sales_mart.ipynb",
+    "Bronze/Notebooks/01_ingest_raw_sales_python.ipynb",
+    "Bronze/Notebooks/01_ingest_raw_sales.ipynb",
+    "Silver/Notebooks/02_clean_sales_data.ipynb",
+    "Gold/Notebooks/03_curate_sales_mart.ipynb",
 ]
+# Default pipeline paths for new structure (Bronze/, Silver/, Gold/ folders)
+# Each tier has a single Pipelines folder with pipeline definitions
 DEFAULT_PIPELINES_BY_LAYER = {
-    "bronze": ["bronze/pipelines/bronze_ingest_pipeline.json"],
-    "silver": ["silver/pipelines/silver_transform_pipeline.json"],
-    "gold": ["gold/pipelines/gold_curated_pipeline.json"],
+    "bronze": ["Bronze/Pipelines/bronze_ingest_pipeline.json"],
+    "silver": ["Silver/Pipelines/silver_transform_pipeline.json"],
+    "gold": ["Gold/Pipelines/gold_curated_pipeline.json"],
 }
 DEFAULT_PARAMS_FILE = "infra/medallion_workspace_params.json"
 DEFAULT_WORKSPACE_IDS_OUTPUT = "infra/workspace_ids.json"
@@ -338,6 +340,53 @@ class FabricClient:
             return {"id": "pending", "displayName": display_name, "status": "pending"}
 
         return response.json()
+
+    def update_notebook(self, workspace_id: str, notebook_id: str, content: dict) -> dict:
+        """Update an existing notebook definition in-place."""
+        notebook_json = json.dumps(content).encode("utf-8")
+        notebook_b64 = base64.b64encode(notebook_json).decode("utf-8")
+
+        payload = {
+            "definition": {
+                "format": "ipynb",
+                "parts": [
+                    {
+                        "path": "notebook-content.ipynb",
+                        "payloadType": "InlineBase64",
+                        "payload": notebook_b64,
+                    }
+                ],
+            },
+        }
+
+        endpoints = [
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/notebooks/{notebook_id}/updateDefinition",
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/items/{notebook_id}/updateDefinition",
+        ]
+
+        last_status = None
+        last_error = ""
+
+        for url in endpoints:
+            response = requests.post(url, json=payload, headers=self.headers)
+            if response.status_code in (404, 405):
+                last_status = response.status_code
+                last_error = response.text
+                continue
+            if response.status_code not in (200, 201, 202):
+                print(f"   API Response: {response.status_code}")
+                print(f"   Error: {response.text}")
+            response.raise_for_status()
+
+            if response.status_code == 202:
+                return {"id": notebook_id, "status": "pending"}
+
+            return response.json() if response.text else {"id": notebook_id, "status": "updated"}
+
+        raise RuntimeError(
+            "Unable to update notebook definition with available Fabric endpoints. "
+            f"Last status: {last_status}, response: {last_error}"
+        )
 
     def create_pipeline(self, workspace_id: str, display_name: str, content: dict) -> dict:
         pipeline_definition = normalize_pipeline_definition(content)
@@ -683,7 +732,7 @@ def main() -> None:
     parser.add_argument(
         "--notebook-dir",
         default=None,
-        help="Directory containing notebook files (default: Medallion)",
+        help="Base directory containing tier notebook folders (default: current directory)",
     )
     parser.add_argument(
         "--capacity-id",
@@ -747,7 +796,7 @@ def main() -> None:
         if args.lakehouse_suffix is not None
         else params.get("lakehouse_suffix", "lakehouse")
     )
-    notebook_dir = args.notebook_dir if args.notebook_dir is not None else params.get("notebook_dir", "Medallion")
+    notebook_dir = args.notebook_dir if args.notebook_dir is not None else params.get("notebook_dir", ".")
     capacity_id = args.capacity_id if args.capacity_id is not None else params.get("capacity_id")
     workspace_description = (
         args.workspace_description
@@ -863,20 +912,27 @@ def main() -> None:
                     content = load_notebook_content(notebook_path)
                     existing_notebook_id = client.get_notebook_id(workspace_id, display_name)
                     if existing_notebook_id:
-                        print("      ♻️ Existing notebook found, replacing")
-                        client.delete_notebook(workspace_id, existing_notebook_id)
-                    response = retry_create_after_delete(
-                        lambda: client.create_notebook(workspace_id, display_name, content),
-                        display_name,
-                        "notebook",
-                    )
-                    if response.get("status") == "exists":
-                        summary["notebooks_skipped"] += 1
-                        print("      ⏭️ Already exists, skipped")
-                        nb_id = client.get_notebook_id(workspace_id, display_name)
-                        if nb_id:
-                            notebook_id_map[display_name] = nb_id
+                        print("      ♻️ Existing notebook found, updating definition")
+                        response = client.update_notebook(workspace_id, existing_notebook_id, content)
+                        summary["notebooks_deployed"] += 1
+                        notebook_id_map[display_name] = existing_notebook_id
+                        if response.get("status") == "pending":
+                            print("      ✅ Update requested (async)")
+                        else:
+                            print("      ✅ Updated")
                     else:
+                        response = retry_create_after_delete(
+                            lambda: client.create_notebook(workspace_id, display_name, content),
+                            display_name,
+                            "notebook",
+                        )
+                        if response.get("status") == "exists":
+                            summary["notebooks_skipped"] += 1
+                            print("      ⏭️ Already exists, skipped")
+                            nb_id = client.get_notebook_id(workspace_id, display_name)
+                            if nb_id:
+                                notebook_id_map[display_name] = nb_id
+                            continue
                         summary["notebooks_deployed"] += 1
                         print("      ✅ Deployed")
                         if response.get("id"):
