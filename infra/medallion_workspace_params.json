@@ -20,10 +20,10 @@
     "gold": "gold_lakehouse"
   },
   "notebooks": [
-    "Bronze/Notebooks/01_ingest_raw_sales_python.ipynb",
-    "Bronze/Notebooks/01_ingest_raw_sales.ipynb",
-    "Silver/Notebooks/02_clean_sales_data.ipynb",
-    "Gold/Notebooks/03_curate_sales_mart.ipynb"
+    "Bronze/Notebooks/01_ingest_raw_sales_python.Notebook",
+    "Bronze/Notebooks/01_ingest_raw_sales.Notebook",
+    "Silver/Notebooks/02_clean_sales_data.Notebook",
+    "Gold/Notebooks/03_curate_sales_mart.Notebook"
   ],
   "pipelines_by_layer": {
     "bronze": [

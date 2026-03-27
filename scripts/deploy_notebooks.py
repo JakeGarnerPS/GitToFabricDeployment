@@ -16,10 +16,10 @@ from typing import Optional
 # Configuration
 FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1"
 NOTEBOOKS = [
-    "Bronze/Notebooks/01_ingest_raw_sales.ipynb",
-    "Bronze/Notebooks/01_ingest_raw_sales_python.ipynb",
-    "Silver/Notebooks/02_clean_sales_data.ipynb",
-    "Gold/Notebooks/03_curate_sales_mart.ipynb"
+    "Bronze/Notebooks/01_ingest_raw_sales.Notebook",
+    "Bronze/Notebooks/01_ingest_raw_sales_python.Notebook",
+    "Silver/Notebooks/02_clean_sales_data.Notebook",
+    "Gold/Notebooks/03_curate_sales_mart.Notebook"
 ]
 
 
@@ -41,13 +41,13 @@ class FabricClient:
             "Content-Type": "application/json"
         }
     
-    def create_notebook(self, name: str, content: dict) -> dict:
+    def create_notebook(self, name: str, content: str) -> dict:
         """
         Create a notebook in the workspace
         
         Args:
-            name: Name of the notebook (without .ipynb)
-            content: Notebook content (dict from JSON)
+            name: Name of the notebook
+            content: Notebook content as a string
             
         Returns:
             Response JSON with notebook details
@@ -55,16 +55,14 @@ class FabricClient:
         url = f"{FABRIC_API_BASE_URL}/workspaces/{self.workspace_id}/notebooks"
         
         # Convert notebook to base64
-        notebook_json = json.dumps(content).encode('utf-8')
-        notebook_b64 = base64.b64encode(notebook_json).decode('utf-8')
+        notebook_b64 = base64.b64encode(content.encode('utf-8')).decode('utf-8')
         
         payload = {
             "displayName": name,
             "definition": {
-                "format": "ipynb",
                 "parts": [
                     {
-                        "path": "notebook-content.ipynb",
+                        "path": "notebook-content.py",
                         "payloadType": "InlineBase64",
                         "payload": notebook_b64
                     }
@@ -86,17 +84,15 @@ class FabricClient:
         
         return response.json()
 
-    def update_notebook(self, notebook_id: str, content: dict) -> dict:
+    def update_notebook(self, notebook_id: str, content: str) -> dict:
         """Update an existing notebook definition in-place."""
-        notebook_json = json.dumps(content).encode('utf-8')
-        notebook_b64 = base64.b64encode(notebook_json).decode('utf-8')
+        notebook_b64 = base64.b64encode(content.encode('utf-8')).decode('utf-8')
 
         payload = {
             "definition": {
-                "format": "ipynb",
                 "parts": [
                     {
-                        "path": "notebook-content.ipynb",
+                        "path": "notebook-content.py",
                         "payloadType": "InlineBase64",
                         "payload": notebook_b64
                     }
@@ -168,23 +164,28 @@ class FabricClient:
         return None
 
 
-def load_notebook_content(file_path: str) -> dict:
+def load_notebook_content(file_path: str) -> str:
     """
-    Load notebook content from file
+    Load notebook content from a .Notebook folder or plain file
     
     Args:
-        file_path: Path to .ipynb file
+        file_path: Path to a .Notebook folder or notebook file
         
     Returns:
-        Notebook content as dict
+        Notebook content as a string
     """
+    if os.path.isdir(file_path):
+        py_path = os.path.join(file_path, "notebook-content.py")
+        if not os.path.exists(py_path):
+            raise FileNotFoundError(f"notebook-content.py not found in: {file_path}")
+        with open(py_path, 'r') as f:
+            return f.read()
+
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Notebook file not found: {file_path}")
     
     with open(file_path, 'r') as f:
-        content = json.load(f)
-    
-    return content
+        return f.read()
 
 
 def get_notebook_display_name(file_path: str) -> str:
@@ -192,12 +193,12 @@ def get_notebook_display_name(file_path: str) -> str:
     Get display name from notebook file path
     
     Args:
-        file_path: Path to notebook file
+        file_path: Path to .Notebook folder or notebook file
         
     Returns:
-        Display name (filename without extension)
+        Display name (folder name without .Notebook, or filename without extension)
     """
-    name = Path(file_path).stem  # Remove .ipynb
+    name = Path(file_path).stem  # Removes .Notebook or .ipynb
     return name
 
 

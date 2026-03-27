@@ -311,7 +311,7 @@ For each workspace (`dev`, `prod`, `feature`, `staging`):
 ### Notebook Deployment Fails
 
 - Verify the notebook base directory exists and contains `Bronze/Notebooks/`, `Silver/Notebooks/`, and `Gold/Notebooks/`
-- Ensure the `.ipynb` files listed in `notebooks` exist
+- Ensure the `.Notebook` folders listed in `notebooks` exist
 - Check for invalid notebook JSON or unsupported content
 - If an update call fails in your tenant, rerun once after a short delay (newly created items can be briefly unavailable)
 - Confirm your identity has permissions to update notebook definitions in the target workspace

@@ -21,7 +21,7 @@ Each tier follows this structure:
 ├── DataPipelines/             # Fabric datapipeline items for the tier
 │   └── *.DataPipeline
 ├── Notebooks/                 # Shared notebooks for this tier
-│   └── *.ipynb
+│   └── *.Notebook
 ├── Pipelines/                 # Pipeline definitions for this tier
 │   └── *_pipeline.json
 └── README.md

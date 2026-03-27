@@ -5,8 +5,8 @@ The Bronze tier is responsible for raw data ingestion. This folder contains the 
 ## Folder Structure
 
 - **Notebooks/**: Shared notebooks for the Bronze tier
-  - `01_ingest_raw_sales.ipynb` - Python-based raw sales data ingestion
-  - `01_ingest_raw_sales_python.ipynb` - Alternative Python ingestion notebook
+  - `01_ingest_raw_sales.Notebook` - Python-based raw sales data ingestion
+  - `01_ingest_raw_sales_python.Notebook` - Alternative Python ingestion notebook
 
 - **Pipelines/**: Bronze tier pipeline
   - `bronze_ingest_pipeline.json` - Raw data ingestion pipeline

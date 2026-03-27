@@ -5,7 +5,7 @@ The Silver tier is responsible for data cleaning, transformation, and standardiz
 ## Folder Structure
 
 - **Notebooks/**: Shared notebooks for the Silver tier
-  - `02_clean_sales_data.ipynb` - Data cleaning and transformation notebook
+  - `02_clean_sales_data.Notebook` - Data cleaning and transformation notebook
 
 - **Pipelines/**: Silver tier pipeline
   - `silver_transform_pipeline.json` - Data transformation and cleaning pipeline

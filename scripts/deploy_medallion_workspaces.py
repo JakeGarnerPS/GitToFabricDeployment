@@ -35,10 +35,10 @@ FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1"
 DEFAULT_ENVIRONMENTS = ["dev", "prod", "feature", "staging"]
 DEFAULT_MEDALLION_LAKEHOUSES = ["raw", "bronze", "silver", "gold"]
 DEFAULT_NOTEBOOKS = [
-    "Bronze/Notebooks/01_ingest_raw_sales_python.ipynb",
-    "Bronze/Notebooks/01_ingest_raw_sales.ipynb",
-    "Silver/Notebooks/02_clean_sales_data.ipynb",
-    "Gold/Notebooks/03_curate_sales_mart.ipynb",
+    "Bronze/Notebooks/01_ingest_raw_sales_python.Notebook",
+    "Bronze/Notebooks/01_ingest_raw_sales.Notebook",
+    "Silver/Notebooks/02_clean_sales_data.Notebook",
+    "Gold/Notebooks/03_curate_sales_mart.Notebook",
 ]
 # Default pipeline paths for new structure (Bronze/, Silver/, Gold/ folders)
 # Each tier has a single Pipelines folder with pipeline definitions
@@ -305,19 +305,17 @@ class FabricClient:
             f"Last status: {last_status}, response: {last_error}"
         )
 
-    def create_notebook(self, workspace_id: str, display_name: str, content: dict) -> dict:
+    def create_notebook(self, workspace_id: str, display_name: str, content: str) -> dict:
         url = f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/notebooks"
 
-        notebook_json = json.dumps(content).encode("utf-8")
-        notebook_b64 = base64.b64encode(notebook_json).decode("utf-8")
+        notebook_b64 = base64.b64encode(content.encode("utf-8")).decode("utf-8")
 
         payload = {
             "displayName": display_name,
             "definition": {
-                "format": "ipynb",
                 "parts": [
                     {
-                        "path": "notebook-content.ipynb",
+                        "path": "notebook-content.py",
                         "payloadType": "InlineBase64",
                         "payload": notebook_b64,
                     }
@@ -341,17 +339,15 @@ class FabricClient:
 
         return response.json()
 
-    def update_notebook(self, workspace_id: str, notebook_id: str, content: dict) -> dict:
+    def update_notebook(self, workspace_id: str, notebook_id: str, content: str) -> dict:
         """Update an existing notebook definition in-place."""
-        notebook_json = json.dumps(content).encode("utf-8")
-        notebook_b64 = base64.b64encode(notebook_json).decode("utf-8")
+        notebook_b64 = base64.b64encode(content.encode("utf-8")).decode("utf-8")
 
         payload = {
             "definition": {
-                "format": "ipynb",
                 "parts": [
                     {
-                        "path": "notebook-content.ipynb",
+                        "path": "notebook-content.py",
                         "payloadType": "InlineBase64",
                         "payload": notebook_b64,
                     }
@@ -501,9 +497,14 @@ def choose_existing_notebooks(notebook_dir: str, candidates: List[str]) -> List[
     return found
 
 
-def load_notebook_content(file_path: str) -> dict:
-    with open(file_path, "r", encoding="utf-8") as handle:
-        return json.load(handle)
+def load_notebook_content(path: str) -> str:
+    """Read notebook content from a .Notebook folder (notebook-content.py) or a plain file."""
+    if os.path.isdir(path):
+        py_path = os.path.join(path, "notebook-content.py")
+        with open(py_path, "r", encoding="utf-8") as handle:
+            return handle.read()
+    with open(path, "r", encoding="utf-8") as handle:
+        return handle.read()
 
 
 def load_json_content(file_path: str) -> dict:

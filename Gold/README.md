@@ -5,7 +5,7 @@ The Gold tier is responsible for creating curated, business-ready data marts. Th
 ## Folder Structure
 
 - **Notebooks/**: Shared notebooks for the Gold tier
-  - `03_curate_sales_mart.ipynb` - Sales data mart curation notebook
+  - `03_curate_sales_mart.Notebook` - Sales data mart curation notebook
 
 - **Pipelines/**: Gold tier pipeline
   - `gold_curated_pipeline.json` - Data mart curation pipeline
