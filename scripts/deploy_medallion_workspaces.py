@@ -687,6 +687,7 @@ def main() -> None:
             "  python scripts/deploy_medallion_workspaces.py --interactive --workspace staging\n"
             "  python scripts/deploy_medallion_workspaces.py --interactive --workspace feature\n"
             "  python scripts/deploy_medallion_workspaces.py --interactive --workspace all\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspaces-only\n"
             "  python scripts/deploy_medallion_workspaces.py --token <token> --params-file infra/medallion_workspace_params.json\n"
             "  python scripts/deploy_medallion_workspaces.py --environments dev,prod,feature,staging --capacity-id <id>"
         ),
@@ -764,6 +765,11 @@ def main() -> None:
         action="store_true",
         help="Skip pipeline deployment when the pipeline already exists",
     )
+    parser.add_argument(
+        "--workspaces-only",
+        action="store_true",
+        help="Only create/verify workspaces and assign capacity. Skip lakehouses, notebooks, and pipelines.",
+    )
 
     args = parser.parse_args()
 
@@ -831,7 +837,7 @@ def main() -> None:
             print("   Proceeding with selected workspace only.")
         environments = [args.workspace]
 
-    if not os.path.isdir(notebook_dir):
+    if not args.workspaces_only and not os.path.isdir(notebook_dir):
         print(f"❌ Notebook directory not found: {notebook_dir}")
         sys.exit(1)
 
@@ -887,6 +893,9 @@ def main() -> None:
             except Exception as error:  # pylint: disable=broad-except
                 summary["capacity_assignments_failed"] += 1
                 print(f"   ❌ Capacity assignment failed: {error}")
+
+        if args.workspaces_only:
+            continue
 
         # ── Deploy notebooks first so IDs are available for pipeline resolution ──
         notebook_id_map: Dict[str, str] = {}
