@@ -1,35 +1,259 @@
 {
-  "generatedAtUtc": "2026-03-26T15:36:18.218922+00:00",
+  "generatedAtUtc": "2026-03-27T00:00:00.000000+00:00",
   "capacityId": "667C93CA-2177-448B-B39B-EA656D994404",
   "sourceParametersFile": "infra/medallion_workspace_params.json",
   "workspaces": [
     {
-      "environment": "dev",
-      "workspaceName": "medallion-dev",
-      "workspaceId": "bafe69f9-6a07-4f62-a1bc-de1fef9e9086",
+      "tier": "Bronze",
+      "environment": "Prod",
+      "workspaceName": "Road4_Bronze",
+      "workspaceId": "00000000-0000-0000-0000-000000000001",
       "lakehouses": [
         {
-          "name": "raw_lakehouse",
-          "id": "d1da7399-0b88-460e-98a8-a4f84c9d54c8",
-          "medallionLayer": "raw"
-        },
+          "name": "bronze_lakehouse",
+          "id": "00000000-0000-0000-0000-000000000011",
+          "medallionLayer": "bronze"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "bronze_ingest_pipeline",
+          "id": "00000000-0000-0000-0000-000000000021",
+          "medallionLayer": "bronze",
+          "sourcePath": "Bronze/Pipelines/bronze_ingest_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Bronze",
+      "environment": "Dev",
+      "workspaceName": "Road4_Bronze_Dev",
+      "workspaceId": "00000000-0000-0000-0000-000000000002",
+      "lakehouses": [
         {
           "name": "bronze_lakehouse",
-          "id": "468c2a4f-43de-458c-97da-0f4f71fe3480",
+          "id": "00000000-0000-0000-0000-000000000012",
           "medallionLayer": "bronze"
-        },
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "bronze_ingest_pipeline",
+          "id": "00000000-0000-0000-0000-000000000022",
+          "medallionLayer": "bronze",
+          "sourcePath": "Bronze/Pipelines/bronze_ingest_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Bronze",
+      "environment": "Staging",
+      "workspaceName": "Road4_Bronze_Staging",
+      "workspaceId": "00000000-0000-0000-0000-000000000003",
+      "lakehouses": [
+        {
+          "name": "bronze_lakehouse",
+          "id": "00000000-0000-0000-0000-000000000013",
+          "medallionLayer": "bronze"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "bronze_ingest_pipeline",
+          "id": "00000000-0000-0000-0000-000000000023",
+          "medallionLayer": "bronze",
+          "sourcePath": "Bronze/Pipelines/bronze_ingest_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Bronze",
+      "environment": "Feature",
+      "workspaceName": "Road4_Bronze_Feature",
+      "workspaceId": "00000000-0000-0000-0000-000000000004",
+      "lakehouses": [
+        {
+          "name": "bronze_lakehouse",
+          "id": "00000000-0000-0000-0000-000000000014",
+          "medallionLayer": "bronze"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "bronze_ingest_pipeline",
+          "id": "00000000-0000-0000-0000-000000000024",
+          "medallionLayer": "bronze",
+          "sourcePath": "Bronze/Pipelines/bronze_ingest_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Silver",
+      "environment": "Prod",
+      "workspaceName": "Road4_Silver",
+      "workspaceId": "00000000-0000-0000-0000-000000000005",
+      "lakehouses": [
         {
           "name": "silver_lakehouse",
-          "id": "ab886043-371e-4845-964c-e332188cc692",
+          "id": "00000000-0000-0000-0000-000000000015",
           "medallionLayer": "silver"
-        },
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "silver_transform_pipeline",
+          "id": "00000000-0000-0000-0000-000000000025",
+          "medallionLayer": "silver",
+          "sourcePath": "Silver/Pipelines/silver_transform_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Silver",
+      "environment": "Dev",
+      "workspaceName": "Road4_Silver_Dev",
+      "workspaceId": "00000000-0000-0000-0000-000000000006",
+      "lakehouses": [
+        {
+          "name": "silver_lakehouse",
+          "id": "00000000-0000-0000-0000-000000000016",
+          "medallionLayer": "silver"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "silver_transform_pipeline",
+          "id": "00000000-0000-0000-0000-000000000026",
+          "medallionLayer": "silver",
+          "sourcePath": "Silver/Pipelines/silver_transform_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Silver",
+      "environment": "Staging",
+      "workspaceName": "Road4_Silver_Staging",
+      "workspaceId": "00000000-0000-0000-0000-000000000007",
+      "lakehouses": [
+        {
+          "name": "silver_lakehouse",
+          "id": "00000000-0000-0000-0000-000000000017",
+          "medallionLayer": "silver"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "silver_transform_pipeline",
+          "id": "00000000-0000-0000-0000-000000000027",
+          "medallionLayer": "silver",
+          "sourcePath": "Silver/Pipelines/silver_transform_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Silver",
+      "environment": "Feature",
+      "workspaceName": "Road4_Silver_Feature",
+      "workspaceId": "00000000-0000-0000-0000-000000000008",
+      "lakehouses": [
+        {
+          "name": "silver_lakehouse",
+          "id": "00000000-0000-0000-0000-000000000018",
+          "medallionLayer": "silver"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "silver_transform_pipeline",
+          "id": "00000000-0000-0000-0000-000000000028",
+          "medallionLayer": "silver",
+          "sourcePath": "Silver/Pipelines/silver_transform_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Gold",
+      "environment": "Prod",
+      "workspaceName": "Road4_Gold",
+      "workspaceId": "00000000-0000-0000-0000-000000000009",
+      "lakehouses": [
         {
           "name": "gold_lakehouse",
-          "id": "83bb4810-a6e7-445e-b3a6-4c153349bf48",
+          "id": "00000000-0000-0000-0000-000000000019",
           "medallionLayer": "gold"
         }
       ],
-      "pipelines": []
+      "pipelines": [
+        {
+          "name": "gold_curated_pipeline",
+          "id": "00000000-0000-0000-0000-000000000029",
+          "medallionLayer": "gold",
+          "sourcePath": "Gold/Pipelines/gold_curated_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Gold",
+      "environment": "Dev",
+      "workspaceName": "Road4_Gold_Dev",
+      "workspaceId": "00000000-0000-0000-0000-000000000010",
+      "lakehouses": [
+        {
+          "name": "gold_lakehouse",
+          "id": "00000000-0000-0000-0000-000000000020",
+          "medallionLayer": "gold"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "gold_curated_pipeline",
+          "id": "00000000-0000-0000-0000-000000000030",
+          "medallionLayer": "gold",
+          "sourcePath": "Gold/Pipelines/gold_curated_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Gold",
+      "environment": "Staging",
+      "workspaceName": "Road4_Gold_Staging",
+      "workspaceId": "00000000-0000-0000-0000-000000001001",
+      "lakehouses": [
+        {
+          "name": "gold_lakehouse",
+          "id": "00000000-0000-0000-0000-000000002001",
+          "medallionLayer": "gold"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "gold_curated_pipeline",
+          "id": "00000000-0000-0000-0000-000000003001",
+          "medallionLayer": "gold",
+          "sourcePath": "Gold/Pipelines/gold_curated_pipeline.json"
+        }
+      ]
+    },
+    {
+      "tier": "Gold",
+      "environment": "Feature",
+      "workspaceName": "Road4_Gold_Feature",
+      "workspaceId": "00000000-0000-0000-0000-000000001002",
+      "lakehouses": [
+        {
+          "name": "gold_lakehouse",
+          "id": "00000000-0000-0000-0000-000000002002",
+          "medallionLayer": "gold"
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "gold_curated_pipeline",
+          "id": "00000000-0000-0000-0000-000000003002",
+          "medallionLayer": "gold",
+          "sourcePath": "Gold/Pipelines/gold_curated_pipeline.json"
+        }
+      ]
     }
   ]
 }

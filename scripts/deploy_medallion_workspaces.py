@@ -32,17 +32,27 @@ import requests
 
 
 FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1"
-DEFAULT_ENVIRONMENTS = ["dev", "prod", "feature", "staging"]
-DEFAULT_MEDALLION_LAKEHOUSES = ["raw", "bronze", "silver", "gold"]
-DEFAULT_NOTEBOOKS = [
-    "Bronze/Notebooks/01_ingest_raw_sales_python.Notebook",
-    "Bronze/Notebooks/01_ingest_raw_sales.Notebook",
-    "Silver/Notebooks/02_clean_sales_data.Notebook",
-    "Gold/Notebooks/03_curate_sales_mart.Notebook",
-]
-# Default pipeline paths for new structure (Bronze/, Silver/, Gold/ folders)
-# Each tier has a single Pipelines folder with pipeline definitions
-DEFAULT_PIPELINES_BY_LAYER = {
+DEFAULT_TIERS = ["Bronze", "Silver", "Gold"]
+DEFAULT_ENVIRONMENTS = ["Dev", "Prod", "Staging", "Feature"]
+DEFAULT_PROD_ENVIRONMENT = "Prod"  # This environment gets no suffix in workspace names
+DEFAULT_TIER_LAKEHOUSES = {
+    "bronze": "bronze_lakehouse",
+    "silver": "silver_lakehouse",
+    "gold": "gold_lakehouse",
+}
+DEFAULT_TIER_NOTEBOOKS = {
+    "bronze": [
+        "Bronze/Notebooks/01_ingest_raw_sales_python.Notebook",
+        "Bronze/Notebooks/01_ingest_raw_sales.Notebook",
+    ],
+    "silver": [
+        "Silver/Notebooks/02_clean_sales_data.Notebook",
+    ],
+    "gold": [
+        "Gold/Notebooks/03_curate_sales_mart.Notebook",
+    ],
+}
+DEFAULT_TIER_PIPELINES = {
     "bronze": ["Bronze/Pipelines/bronze_ingest_pipeline.json"],
     "silver": ["Silver/Pipelines/silver_transform_pipeline.json"],
     "gold": ["Gold/Pipelines/gold_curated_pipeline.json"],
@@ -632,8 +642,11 @@ def choose_existing_files(base_dir: str, candidates: List[str]) -> List[str]:
     return found
 
 
-def parse_csv_values(raw_values: str, label: str) -> List[str]:
-    values = [value.strip().lower() for value in raw_values.split(",") if value.strip()]
+def parse_csv_values(raw_values: str, label: str, lowercase: bool = True) -> List[str]:
+    if lowercase:
+        values = [value.strip().lower() for value in raw_values.split(",") if value.strip()]
+    else:
+        values = [value.strip() for value in raw_values.split(",") if value.strip()]
     if not values:
         raise ValueError(f"At least one {label} value must be provided.")
     return values
@@ -652,18 +665,26 @@ def load_params_file(params_file: str) -> dict:
     return data
 
 
-def resolve_workspace_name(environment: str, prefix: str, workspace_names: dict) -> str:
-    explicit_name = workspace_names.get(environment)
-    if explicit_name:
-        return explicit_name
-    return f"{prefix}-{environment}"
+def resolve_tier_workspace_name(
+    tier: str,
+    environment: str,
+    prefix: str,
+    prod_environment: str,
+    workspace_names: dict,
+) -> str:
+    """Return the workspace display name for a tier + environment combination.
 
-
-def resolve_lakehouse_name(lakehouse_key: str, lakehouse_suffix: str, lakehouse_names: dict) -> str:
-    explicit_name = lakehouse_names.get(lakehouse_key)
-    if explicit_name:
-        return explicit_name
-    return f"{lakehouse_key}_{lakehouse_suffix}"
+    The prod environment gets no suffix: {prefix}_{tier}  (e.g., Road4_Bronze).
+    All other environments get:         {prefix}_{tier}_{environment}  (e.g., Road4_Bronze_Dev).
+    Explicit overrides keyed as '{tier}_{environment}' in workspace_names take precedence.
+    """
+    key = f"{tier}_{environment}"
+    explicit = workspace_names.get(key)
+    if explicit:
+        return explicit
+    if environment.lower() == prod_environment.lower():
+        return f"{prefix}_{tier}"
+    return f"{prefix}_{tier}_{environment}"
 
 
 def write_workspace_ids(output_path: str, payload: dict) -> None:
@@ -677,19 +698,18 @@ def write_workspace_ids(output_path: str, payload: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Create Fabric environment workspaces with medallion lakehouses + notebooks",
+        description="Deploy medallion Bronze/Silver/Gold tier workspaces to Microsoft Fabric",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
             "  python scripts/deploy_medallion_workspaces.py --interactive\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace dev\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace prod\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace staging\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace feature\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace Dev\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace Prod\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace Staging\n"
             "  python scripts/deploy_medallion_workspaces.py --interactive --workspace all\n"
             "  python scripts/deploy_medallion_workspaces.py --interactive --workspaces-only\n"
             "  python scripts/deploy_medallion_workspaces.py --token <token> --params-file infra/medallion_workspace_params.json\n"
-            "  python scripts/deploy_medallion_workspaces.py --environments dev,prod,feature,staging --capacity-id <id>"
+            "  python scripts/deploy_medallion_workspaces.py --tiers Bronze,Silver --environments Dev,Prod --capacity-id <id>"
         ),
     )
 
@@ -705,31 +725,33 @@ def main() -> None:
     parser.add_argument(
         "--prefix",
         default=None,
-        help="Workspace naming prefix (default: medallion)",
+        help="Workspace naming prefix (default: Road4)",
+    )
+    parser.add_argument(
+        "--tiers",
+        default=None,
+        help="Comma-separated medallion tiers to deploy (default: Bronze,Silver,Gold)",
     )
     parser.add_argument(
         "--environments",
         default=None,
-        help="Comma-separated workspaces to create (default: dev,prod,feature,staging)",
+        help="Comma-separated environments to deploy per tier (default: Dev,Prod,Staging,Feature)",
     )
     parser.add_argument(
-        "--workspace",
-        choices=["dev", "prod", "staging", "feature", "all"],
-        default="all",
+        "--prod-environment",
+        default=None,
         help=(
-            "Quick workspace selector. Use 'dev' or 'prod' to deploy to one workspace, "
-            "or 'all' to deploy all environments from --environments/params file (default: all)."
+            "Environment name that gets no suffix in workspace names (default: Prod). "
+            "e.g., 'Road4_Bronze' instead of 'Road4_Bronze_Prod'"
         ),
     )
     parser.add_argument(
-        "--medallion-lakehouses",
-        default=None,
-        help="Comma-separated medallion lakehouses to create per workspace (default: raw,bronze,silver,gold)",
-    )
-    parser.add_argument(
-        "--lakehouse-suffix",
-        default=None,
-        help="Suffix for each lakehouse display name (default: lakehouse)",
+        "--workspace",
+        default="all",
+        help=(
+            "Filter deployment to a single environment (e.g., Dev, Prod) across all tiers, "
+            "or 'all' to deploy every environment (default: all)."
+        ),
     )
     parser.add_argument(
         "--notebook-dir",
@@ -787,21 +809,21 @@ def main() -> None:
         print(f"❌ Invalid parameter file: {error}")
         sys.exit(1)
 
-    prefix = args.prefix if args.prefix is not None else params.get("prefix", "medallion")
+    prefix = args.prefix if args.prefix is not None else params.get("prefix", "Road4")
+    tiers_raw = (
+        args.tiers
+        if args.tiers is not None
+        else params.get("tiers", ",".join(DEFAULT_TIERS))
+    )
     environments_raw = (
         args.environments
         if args.environments is not None
         else params.get("environments", ",".join(DEFAULT_ENVIRONMENTS))
     )
-    medallion_lakehouses_raw = (
-        args.medallion_lakehouses
-        if args.medallion_lakehouses is not None
-        else params.get("medallion_lakehouses", ",".join(DEFAULT_MEDALLION_LAKEHOUSES))
-    )
-    lakehouse_suffix = (
-        args.lakehouse_suffix
-        if args.lakehouse_suffix is not None
-        else params.get("lakehouse_suffix", "lakehouse")
+    prod_environment = (
+        args.prod_environment
+        if args.prod_environment is not None
+        else params.get("prod_environment", DEFAULT_PROD_ENVIRONMENT)
     )
     notebook_dir = args.notebook_dir if args.notebook_dir is not None else params.get("notebook_dir", ".")
     capacity_id = args.capacity_id if args.capacity_id is not None else params.get("capacity_id")
@@ -811,10 +833,12 @@ def main() -> None:
         else params.get("workspace_description", "Managed by deploy_medallion_workspaces.py")
     )
     workspace_names = params.get("workspace_names", {})
-    lakehouse_names = params.get("lakehouse_names", {})
-    notebook_candidates = params.get("notebooks", DEFAULT_NOTEBOOKS)
-    pipelines_by_layer = dict(DEFAULT_PIPELINES_BY_LAYER)
-    pipelines_by_layer.update(params.get("pipelines_by_layer", {}))
+    tier_lakehouses = dict(DEFAULT_TIER_LAKEHOUSES)
+    tier_lakehouses.update({k.lower(): v for k, v in params.get("tier_lakehouses", {}).items()})
+    tier_notebooks = dict(DEFAULT_TIER_NOTEBOOKS)
+    tier_notebooks.update({k.lower(): v for k, v in params.get("tier_notebooks", {}).items()})
+    tier_pipelines = dict(DEFAULT_TIER_PIPELINES)
+    tier_pipelines.update({k.lower(): v for k, v in params.get("tier_pipelines", {}).items()})
     workspace_ids_output = (
         args.workspace_ids_output
         if args.workspace_ids_output is not None
@@ -822,20 +846,20 @@ def main() -> None:
     )
 
     try:
-        environments = parse_csv_values(environments_raw, "environment")
-        medallion_lakehouses = parse_csv_values(medallion_lakehouses_raw, "medallion lakehouse")
+        tiers = parse_csv_values(tiers_raw, "tier", lowercase=False)
+        environments = parse_csv_values(environments_raw, "environment", lowercase=False)
     except ValueError as error:
         print(f"❌ {error}")
         sys.exit(1)
 
     if args.workspace != "all":
-        if args.workspace not in environments:
+        matched = [e for e in environments if e.lower() == args.workspace.lower()]
+        if not matched:
             print(
-                f"⚠️ Workspace '{args.workspace}' was selected but is not present in environments: "
-                f"{', '.join(environments)}"
+                f"⚠️ Environment '{args.workspace}' not found in: {', '.join(environments)}"
             )
-            print("   Proceeding with selected workspace only.")
-        environments = [args.workspace]
+            print("   Proceeding with selected environment only.")
+        environments = matched if matched else [args.workspace]
 
     if not args.workspaces_only and not os.path.isdir(notebook_dir):
         print(f"❌ Notebook directory not found: {notebook_dir}")
@@ -843,9 +867,11 @@ def main() -> None:
 
     client = FabricClient(access_token)
 
+    prod_label = f"('{prod_environment}' environment \u2192 no env suffix, e.g., {prefix}_Bronze)"
     print("🚀 Starting medallion deployment...")
-    print(f"   Workspaces: {', '.join(environments)}")
-    print(f"   Lakehouses per workspace: {', '.join(medallion_lakehouses)}")
+    print(f"   Tiers: {', '.join(tiers)}")
+    print(f"   Environments: {', '.join(environments)}")
+    print(f"   Prod environment: {prod_label}")
     print(f"   Notebook dir: {notebook_dir}")
     print(f"   Params file: {args.params_file}")
     print(f"   Workspace IDs output: {workspace_ids_output}")
@@ -864,111 +890,119 @@ def main() -> None:
     }
     workspace_id_records = []
 
-    for environment in environments:
-        workspace_name = resolve_workspace_name(environment, prefix, workspace_names)
+    for tier in tiers:
+        tier_key = tier.lower()
+        tier_notebook_list = tier_notebooks.get(tier_key, [])
+        tier_pipeline_list = tier_pipelines.get(tier_key, [])
+        tier_lakehouse_name = tier_lakehouses.get(tier_key, f"{tier_key}_lakehouse")
 
-        print("\n" + "=" * 72)
-        print(f"📦 Workspace: {environment}")
-        print("=" * 72)
+        for environment in environments:
+            workspace_name = resolve_tier_workspace_name(
+                tier, environment, prefix, prod_environment, workspace_names
+            )
 
-        print(f"🧭 Ensuring workspace '{workspace_name}'...")
-        workspace = client.get_or_create_workspace(
-            workspace_name,
-            description=workspace_description,
-            capacity_id=capacity_id,
-        )
-        workspace_id = workspace["id"]
-        summary["workspaces_created_or_found"] += 1
-        print(f"   ✅ Workspace ready: {workspace_name} ({workspace_id})")
+            print("\n" + "=" * 72)
+            print(f"📦 {tier} / {environment}  →  {workspace_name}")
+            print("=" * 72)
 
-        if capacity_id:
-            print(f"🧲 Assigning workspace to capacity '{capacity_id}'...")
-            try:
-                assignment = client.assign_workspace_to_capacity(workspace_id, capacity_id)
-                summary["capacity_assignments_succeeded"] += 1
-                print(
-                    "   ✅ Capacity assignment complete "
-                    f"(HTTP {assignment['statusCode']}, {assignment['endpoint']})"
-                )
-            except Exception as error:  # pylint: disable=broad-except
-                summary["capacity_assignments_failed"] += 1
-                print(f"   ❌ Capacity assignment failed: {error}")
+            print(f"🧭 Ensuring workspace '{workspace_name}'...")
+            workspace = client.get_or_create_workspace(
+                workspace_name,
+                description=workspace_description,
+                capacity_id=capacity_id,
+            )
+            workspace_id = workspace["id"]
+            summary["workspaces_created_or_found"] += 1
+            print(f"   ✅ Workspace ready: {workspace_name} ({workspace_id})")
 
-        if args.workspaces_only:
-            continue
-
-        # ── Deploy notebooks first so IDs are available for pipeline resolution ──
-        notebook_id_map: Dict[str, str] = {}
-        notebook_files = choose_existing_notebooks(notebook_dir, notebook_candidates)
-
-        if not notebook_files:
-            print("   ⚠️ No notebooks found for deployment, skipping notebook deployment")
-        else:
-            print("\n📓 Deploying notebooks...")
-            for notebook_file in notebook_files:
-                notebook_path = os.path.join(notebook_dir, notebook_file)
-                display_name = notebook_display_name(notebook_file)
-
-                if args.skip_existing_notebooks and client.notebook_exists(workspace_id, display_name):
-                    print(f"   ⏭️ Notebook already exists, skipped: {display_name}")
-                    summary["notebooks_skipped"] += 1
-                    nb_id = client.get_notebook_id(workspace_id, display_name)
-                    if nb_id:
-                        notebook_id_map[display_name] = nb_id
-                    continue
-
-                print(f"   📝 Deploying notebook: {display_name}")
+            if capacity_id:
+                print(f"🧲 Assigning workspace to capacity '{capacity_id}'...")
                 try:
-                    content = load_notebook_content(notebook_path)
-                    existing_notebook_id = client.get_notebook_id(workspace_id, display_name)
-                    if existing_notebook_id:
-                        print("      ♻️ Existing notebook found, updating definition")
-                        response = client.update_notebook(workspace_id, existing_notebook_id, content)
-                        summary["notebooks_deployed"] += 1
-                        notebook_id_map[display_name] = existing_notebook_id
-                        if response.get("status") == "pending":
-                            print("      ✅ Update requested (async)")
-                        else:
-                            print("      ✅ Updated")
-                    else:
-                        response = retry_create_after_delete(
-                            lambda: client.create_notebook(workspace_id, display_name, content),
-                            display_name,
-                            "notebook",
-                        )
-                        if response.get("status") == "exists":
-                            summary["notebooks_skipped"] += 1
-                            print("      ⏭️ Already exists, skipped")
-                            nb_id = client.get_notebook_id(workspace_id, display_name)
-                            if nb_id:
-                                notebook_id_map[display_name] = nb_id
-                            continue
-                        summary["notebooks_deployed"] += 1
-                        print("      ✅ Deployed")
-                        if response.get("id"):
-                            notebook_id_map[display_name] = response["id"]
+                    assignment = client.assign_workspace_to_capacity(workspace_id, capacity_id)
+                    summary["capacity_assignments_succeeded"] += 1
+                    print(
+                        "   ✅ Capacity assignment complete "
+                        f"(HTTP {assignment['statusCode']}, {assignment['endpoint']})"
+                    )
                 except Exception as error:  # pylint: disable=broad-except
-                    summary["notebooks_failed"] += 1
-                    print(f"      ❌ Failed: {error}")
+                    summary["capacity_assignments_failed"] += 1
+                    print(f"   ❌ Capacity assignment failed: {error}")
 
-        workspace_lakehouses = []
-        workspace_pipelines = []
-        for lakehouse_key in medallion_lakehouses:
-            lakehouse_name = resolve_lakehouse_name(lakehouse_key, lakehouse_suffix, lakehouse_names)
-            print(f"🏠 Ensuring lakehouse '{lakehouse_name}'...")
-            lakehouse = client.get_or_create_lakehouse(workspace_id, lakehouse_name)
+            if args.workspaces_only:
+                continue
+
+            # ── Deploy this tier's notebooks first so IDs are available for pipeline resolution ──
+            notebook_id_map: Dict[str, str] = {}
+            notebook_files = choose_existing_notebooks(notebook_dir, tier_notebook_list)
+
+            if not notebook_files:
+                print(f"   ⚠️ No notebooks found for {tier}, skipping notebook deployment")
+            else:
+                print(f"\n📓 Deploying {tier} notebooks...")
+                for notebook_file in notebook_files:
+                    notebook_path = os.path.join(notebook_dir, notebook_file)
+                    display_name = notebook_display_name(notebook_file)
+
+                    if args.skip_existing_notebooks and client.notebook_exists(workspace_id, display_name):
+                        print(f"   ⏭️ Notebook already exists, skipped: {display_name}")
+                        summary["notebooks_skipped"] += 1
+                        nb_id = client.get_notebook_id(workspace_id, display_name)
+                        if nb_id:
+                            notebook_id_map[display_name] = nb_id
+                        continue
+
+                    print(f"   📝 Deploying notebook: {display_name}")
+                    try:
+                        content = load_notebook_content(notebook_path)
+                        existing_notebook_id = client.get_notebook_id(workspace_id, display_name)
+                        if existing_notebook_id:
+                            print("      ♻️ Existing notebook found, updating definition")
+                            response = client.update_notebook(workspace_id, existing_notebook_id, content)
+                            summary["notebooks_deployed"] += 1
+                            notebook_id_map[display_name] = existing_notebook_id
+                            if response.get("status") == "pending":
+                                print("      ✅ Update requested (async)")
+                            else:
+                                print("      ✅ Updated")
+                        else:
+                            response = retry_create_after_delete(
+                                lambda: client.create_notebook(workspace_id, display_name, content),
+                                display_name,
+                                "notebook",
+                            )
+                            if response.get("status") == "exists":
+                                summary["notebooks_skipped"] += 1
+                                print("      ⏭️ Already exists, skipped")
+                                nb_id = client.get_notebook_id(workspace_id, display_name)
+                                if nb_id:
+                                    notebook_id_map[display_name] = nb_id
+                                continue
+                            summary["notebooks_deployed"] += 1
+                            print("      ✅ Deployed")
+                            if response.get("id"):
+                                notebook_id_map[display_name] = response["id"]
+                    except Exception as error:  # pylint: disable=broad-except
+                        summary["notebooks_failed"] += 1
+                        print(f"      ❌ Failed: {error}")
+
+            # ── Deploy this tier's lakehouse ──
+            workspace_lakehouses = []
+            workspace_pipelines = []
+
+            print(f"🏠 Ensuring lakehouse '{tier_lakehouse_name}'...")
+            lakehouse = client.get_or_create_lakehouse(workspace_id, tier_lakehouse_name)
             summary["lakehouses_created_or_found"] += 1
             print(f"   ✅ Lakehouse ready: {lakehouse.get('displayName')} ({lakehouse.get('id')})")
             workspace_lakehouses.append(
                 {
                     "name": lakehouse.get("displayName"),
                     "id": lakehouse.get("id"),
-                    "medallionLayer": lakehouse_key,
+                    "medallionLayer": tier_key,
                 }
             )
 
-            pipeline_candidates = pipelines_by_layer.get(lakehouse_key, [])
-            pipeline_files = choose_existing_files(notebook_dir, pipeline_candidates)
+            # ── Deploy this tier's pipelines ──
+            pipeline_files = choose_existing_files(notebook_dir, tier_pipeline_list)
 
             for pipeline_file in pipeline_files:
                 pipeline_path = os.path.join(notebook_dir, pipeline_file)
@@ -998,7 +1032,7 @@ def main() -> None:
                         {
                             "name": display_name,
                             "id": response.get("id", display_name),
-                            "medallionLayer": lakehouse_key,
+                            "medallionLayer": tier_key,
                             "sourcePath": pipeline_file,
                         }
                     )
@@ -1023,7 +1057,7 @@ def main() -> None:
                             {
                                 "name": display_name,
                                 "id": shell_response.get("id", display_name),
-                                "medallionLayer": lakehouse_key,
+                                "medallionLayer": tier_key,
                                 "sourcePath": pipeline_file,
                             }
                         )
@@ -1037,15 +1071,16 @@ def main() -> None:
                         summary["pipelines_failed"] += 1
                         print(f"   ❌ Pipeline deployment failed: {shell_error}")
 
-        workspace_id_records.append(
-            {
-                "environment": environment,
-                "workspaceName": workspace_name,
-                "workspaceId": workspace_id,
-                "lakehouses": workspace_lakehouses,
-                "pipelines": workspace_pipelines,
-            }
-        )
+            workspace_id_records.append(
+                {
+                    "tier": tier,
+                    "environment": environment,
+                    "workspaceName": workspace_name,
+                    "workspaceId": workspace_id,
+                    "lakehouses": workspace_lakehouses,
+                    "pipelines": workspace_pipelines,
+                }
+            )
 
     workspace_ids_payload = {
         "generatedAtUtc": datetime.now(timezone.utc).isoformat(),
