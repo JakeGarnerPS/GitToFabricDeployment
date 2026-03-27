@@ -81,6 +81,9 @@ python scripts/deploy_medallion_workspaces.py --interactive --workspace all --ca
 - `--interactive` - Use Azure CLI to get access token
 - `--environments` - Comma-separated list of workspaces to deploy to
 - `--capacity-id` - Optional Fabric capacity ID for workspace assignment
+- `--workspaces-only` - Create/verify workspaces and assign capacity only; skip lakehouses, notebooks, and pipelines
+- `--skip-existing-notebooks` - Skip notebooks that already exist in the workspace
+- `--skip-existing-pipelines` - Skip pipelines that already exist in the workspace
 
 ## Pipeline Configuration
 

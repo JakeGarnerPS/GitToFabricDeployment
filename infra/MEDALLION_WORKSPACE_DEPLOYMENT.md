@@ -216,6 +216,27 @@ python scripts/deploy_medallion_workspaces.py \
 
 By default, rerunning the deployment script updates notebooks in place and replaces existing pipelines in the target workspace. Use the skip flags when you want create-only behavior.
 
+### Workspaces Only (Skip Lakehouses, Notebooks, and Pipelines)
+
+Use `--workspaces-only` to provision (or verify) workspaces and optionally assign capacity without touching any lakehouses, notebooks, or pipelines:
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --workspaces-only
+```
+
+Combine with `--workspace` to target a single environment:
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --workspace dev \
+  --workspaces-only
+```
+
+This is useful when you want to pre-create workspaces and assign them to a capacity before deploying any artifacts.
+
 ## What the Deployment Script Does
 
 The script `scripts/deploy_medallion_workspaces.py` performs the following steps:
@@ -223,9 +244,9 @@ The script `scripts/deploy_medallion_workspaces.py` performs the following steps
 1. Reads configuration from `infra/medallion_workspace_params.json`
 2. Creates or reuses each environment workspace
 3. Optionally assigns each workspace to the configured Fabric capacity
-4. Creates or reuses the medallion lakehouses in each workspace
-5. Creates or replaces the Bronze, Silver, and Gold pipelines in each workspace
-6. Uploads notebook files or updates existing notebook definitions in place in each workspace
+4. Creates or reuses the medallion lakehouses in each workspace  *(skipped with `--workspaces-only`)*
+5. Creates or replaces the Bronze, Silver, and Gold pipelines in each workspace  *(skipped with `--workspaces-only`)*
+6. Uploads notebook files or updates existing notebook definitions in place in each workspace  *(skipped with `--workspaces-only`)*
 7. Writes a manifest file at `infra/workspace_ids.json`
 
 ## Output File
