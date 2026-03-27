@@ -38,3 +38,35 @@ The Fabric item folders in this tier are kept with the source notebooks and JSON
 - `DataPipelines/gold_curated_pipeline.DataPipeline` stores the Fabric datapipeline definition parts
 - `Lakehouses/gold_lakehouse.Lakehouse` stores the gold lakehouse metadata
 
+## Deployment
+
+When you run the deployment script, Gold tier workspaces are created for each environment:
+- `Road4_Gold` (Prod)
+- `Road4_Gold_Dev` (Dev)
+- `Road4_Gold_Staging` (Staging)
+- `Road4_Gold_Feature` (Feature)
+
+Each Gold workspace receives everything discovered in the `Gold/` folder:
+- `gold_lakehouse` — discovered from `Lakehouses/gold_lakehouse.Lakehouse/`
+- `03_curate_sales_mart` notebook — discovered from `Notebooks/03_curate_sales_mart.Notebook/`
+- `gold_curated_pipeline` DataPipeline — discovered from `DataPipelines/gold_curated_pipeline.DataPipeline/`
+
+Items are picked up automatically via `.platform` file scanning. Add a new `.Lakehouse`, `.Notebook`, or `.DataPipeline` folder here and it will be included in the next deployment without any config changes.
+
+Default deployment mode for this repository is Git sync (`--git-sync`).
+
+**Deploy only Gold tier** (all environments):
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --tiers Gold
+```
+
+**Deploy Gold tier, Prod and Staging environments**:
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --tiers Gold --environments Prod,Staging
+```
+
+**Deploy only Gold Prod** (`Road4_Gold`):
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --tiers Gold --workspace Prod
+```
+

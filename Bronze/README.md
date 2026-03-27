@@ -40,3 +40,37 @@ The Fabric item folders in this tier are kept with the source notebooks and JSON
 - `Lakehouses/raw_lakehouse.Lakehouse` stores the raw lakehouse metadata
 - `Lakehouses/bronze_lakehouse.Lakehouse` stores the bronze lakehouse metadata
 
+## Deployment
+
+When you run the deployment script, Bronze tier workspaces are created for each environment:
+- `Road4_Bronze` (Prod)
+- `Road4_Bronze_Dev` (Dev)
+- `Road4_Bronze_Staging` (Staging)
+- `Road4_Bronze_Feature` (Feature)
+
+Each Bronze workspace receives everything discovered in the `Bronze/` folder:
+- `raw_lakehouse` — discovered from `Lakehouses/raw_lakehouse.Lakehouse/`
+- `bronze_lakehouse` — discovered from `Lakehouses/bronze_lakehouse.Lakehouse/`
+- `01_ingest_raw_sales_python` notebook — discovered from `Notebooks/01_ingest_raw_sales_python.Notebook/`
+- `01_ingest_raw_sales` notebook — discovered from `Notebooks/01_ingest_raw_sales.Notebook/`
+- `bronze_ingestion_pipeline` DataPipeline — discovered from `DataPipelines/bronze_ingestion_pipeline.DataPipeline/`
+
+Items are picked up automatically via `.platform` file scanning. Add a new `.Lakehouse`, `.Notebook`, or `.DataPipeline` folder here and it will be included in the next deployment without any config changes.
+
+Default deployment mode for this repository is Git sync (`--git-sync`).
+
+**Deploy only Bronze tier** (all environments — deploys all items above to all 4 workspaces):
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --tiers Bronze
+```
+
+**Deploy only Bronze Prod** (`Road4_Bronze`):
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --tiers Bronze --workspace Prod
+```
+
+**Deploy only Bronze Dev** (`Road4_Bronze_Dev`):
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --tiers Bronze --workspace Dev
+```
+

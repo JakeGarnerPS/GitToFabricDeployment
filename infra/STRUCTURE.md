@@ -30,10 +30,11 @@ Each tier follows this structure:
 ## Key Features
 
 - **Tiered Fabric assets**: Each tier groups its Fabric lakehouses and datapipelines with the notebooks and JSON definitions that support them
+- **Auto-discovery**: The deployment script scans each tier folder for `.platform` files and automatically deploys every `.Lakehouse`, `.Notebook`, and `.DataPipeline` it finds — no config changes needed when adding new items
 - **Shared Notebooks**: Each tier has a single set of notebooks used to process data
-- **Single Pipeline definition per Tier**: Each tier has one JSON pipeline definition that orchestrates the tier's work
+- **DataPipeline items**: Each tier has a `DataPipelines/` folder containing deployable Fabric datapipeline artifacts
 - **Clear Separation of Concerns**: Bronze handles ingestion, Silver handles transformation, Gold handles curation
-- **Scalable**: Easy to add notebooks, lakehouse assets, or pipeline logic within each tier
+- **Scalable**: Drop a new `.Notebook`, `.Lakehouse`, or `.DataPipeline` folder (with a `.platform` file) into any tier and it will be deployed automatically
 
 ## Tier Responsibilities
 
@@ -55,35 +56,79 @@ Each tier follows this structure:
 
 ## Deployment
 
+### Workspace Architecture
+
+The deployment creates **one Fabric workspace per tier per environment** (12 total by default):
+
+```
+Tier × Environment Matrix:
+  Bronze:  Road4_Bronze, Road4_Bronze_Dev, Road4_Bronze_Staging, Road4_Bronze_Feature
+  Silver:  Road4_Silver, Road4_Silver_Dev, Road4_Silver_Staging, Road4_Silver_Feature
+  Gold:    Road4_Gold,   Road4_Gold_Dev,   Road4_Gold_Staging,   Road4_Gold_Feature
+```
+
+Each workspace contains **only that tier's lakehouse, notebooks, and pipelines**—not all four tiers.
+
 ### Deployment Script Options
 
-The `deploy_medallion_workspaces.py` script deploys all notebooks and pipelines across workspaces:
+The `deploy_medallion_workspaces.py` script supports two modes. See [MEDALLION_WORKSPACE_DEPLOYMENT.md](MEDALLION_WORKSPACE_DEPLOYMENT.md) for full details.
 
-**Deploy all workspaces:**
+**Mode 1 — Git Integration (`--git-sync`) (default):** Connect each workspace to its tier directory in the repo and sync all items from Git. Items are created with correct `logicalId` values from `.platform` files, making the workspace fully Git-connected and ready for future syncs without conflicts.
+
+**Mode 2 — REST API (alternate):** Create items via Fabric REST API. Items are discovered automatically from tier folders via `.platform` file scanning. Notebook `logicalId` references in pipeline definitions are resolved to real deployed IDs.
+
+**Deploy all tiers and all environments (default Git sync):**
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync
+```
+
+**Deploy all tiers and all environments (alternate REST API):**
 ```bash
 python scripts/deploy_medallion_workspaces.py --interactive
 ```
 
-**Deploy to specific workspace:**
+**Deploy a single environment across all tiers:**
 ```bash
-python scripts/deploy_medallion_workspaces.py --interactive --workspace prod
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --workspace Dev
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --workspace Prod
 ```
 
-**Deploy with custom parameters:**
+**Deploy a single tier across all environments:**
 ```bash
-python scripts/deploy_medallion_workspaces.py --interactive --workspace all --capacity-id <id>
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --tiers Bronze
+```
+
+**Deploy a single tier and environment:**
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --tiers Bronze --workspace Dev
+```
+
+**Deploy with Git sync for Dev only:**
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --workspace Dev
 ```
 
 ### Key Command-Line Arguments
 
-- `--workspace` - Filter to specific Fabric workspace (dev/prod/staging/feature/all)
+- `--tiers` - Medallion tiers to deploy (Bronze,Silver,Gold by default)
+- `--environments` - Environments to deploy per tier (Dev,Prod,Staging,Feature by default)
+- `--workspace` - Filter to specific environment across all tiers
+- `--prod-environment` - Environment that gets no suffix in workspace names (default: Prod)
+- `--prefix` - Workspace naming prefix (default: Road4)
 - `--token` - Azure access token for Fabric API
 - `--interactive` - Use Azure CLI to get access token
-- `--environments` - Comma-separated list of workspaces to deploy to
 - `--capacity-id` - Optional Fabric capacity ID for workspace assignment
-- `--workspaces-only` - Create/verify workspaces and assign capacity only; skip lakehouses, notebooks, and pipelines
-- `--skip-existing-notebooks` - Skip notebooks that already exist in the workspace
-- `--skip-existing-pipelines` - Skip pipelines that already exist in the workspace
+- `--workspaces-only` - Create/verify workspaces only; skip all artifacts
+- `--skip-existing-notebooks` - Skip notebooks already in the workspace
+- `--skip-existing-pipelines` - Skip pipelines already in the workspace
+- `--git-sync` - Use Fabric Git Integration API instead of REST API item creation
+- `--git-provider` - Git provider: `GitHub` (default) or `AzureDevOps`
+- `--git-org` - GitHub owner or Azure DevOps organisation
+- `--git-repo` - Repository name
+- `--git-branch` - Branch to sync from (default: current git branch)
+- `--git-project` - Azure DevOps project name (AzureDevOps only)
+- `--git-credential-type` - Fabric git credentials source (`Automatic` or `ConfiguredConnection`)
+- `--git-connection-id` - Fabric Git connection ID (required when using `ConfiguredConnection`)
 
 ## Pipeline Configuration
 
@@ -94,8 +139,13 @@ Each tier's pipeline can be customized:
 
 ## Fabric Asset Layout
 
-- `Bronze/Lakehouses/` contains `raw_lakehouse.Lakehouse` and `bronze_lakehouse.Lakehouse`
-- `Bronze/DataPipelines/` contains `bronze_ingestion_pipeline.DataPipeline`
+| Tier | Lakehouses | Notebooks | DataPipelines |
+|------|-----------|-----------|---------------|
+| **Bronze** | `raw_lakehouse`, `bronze_lakehouse` | `01_ingest_raw_sales_python`, `01_ingest_raw_sales` | `bronze_ingestion_pipeline` |
+| **Silver** | `silver_lakehouse` | `02_clean_sales_data` | `silver_transform_pipeline` |
+| **Gold** | `gold_lakehouse` | `03_curate_sales_mart` | `gold_curated_pipeline` |
+
+All items are discovered automatically at deploy time. To add a new item to a tier, create a folder with a `.platform` file — no script or config changes required.
 - `Silver/Lakehouses/` contains `silver_lakehouse.Lakehouse`
 - `Silver/DataPipelines/` contains `silver_transform_pipeline.DataPipeline`
 - `Gold/Lakehouses/` contains `gold_lakehouse.Lakehouse`

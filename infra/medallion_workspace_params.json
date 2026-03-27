@@ -7,6 +7,14 @@
   "workspace_description": "Managed by deploy_medallion_workspaces.py",
   "notebook_dir": ".",
   "workspace_ids_output": "infra/workspace_ids.json",
+  "git_connection": {
+    "git_provider_type": "GitHub",
+    "owner_name": "JakeGarnerPS",
+    "repository_name": "GitToFabricDeployment",
+    "branch_name": "road4_example_project",
+    "git_credential_type": "ConfiguredConnection",
+    "git_connection_id": "06367384-5c07-47cb-9885-bcb5123c7bbd"
+  },
   "workspace_names": {
     "Bronze_Dev": "Road4_Bronze_Dev",
     "Bronze_Prod": "Road4_Bronze",

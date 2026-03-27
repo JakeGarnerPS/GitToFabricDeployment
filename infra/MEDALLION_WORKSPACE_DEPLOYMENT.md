@@ -1,6 +1,51 @@
 # Medallion Workspace Deployment Guide
 
-This guide explains how to deploy the environment-based Fabric setup in this repository using the automation scripts.
+This guide explains how to deploy the tier-per-environment Fabric setup in this repository using the automation scripts.
+
+## Deployment Modes
+
+The script supports two deployment modes:
+
+### Mode 1 — Git Integration (`--git-sync`) (default)
+
+Connects each workspace to its tier directory in this Git repo (`Bronze/`, `Silver/`, `Gold/`) using the Fabric Git Integration API, then calls `updateFromGit (PreferRemote)` to create all items from the `.platform` files.
+
+- Items are created with the **correct `logicalId` values** from `.platform` files
+- The workspace is **fully Git-connected** after deployment — subsequent Git syncs work without conflicts
+- Fabric handles all notebook reference resolution automatically
+- Requires a GitHub (or Azure DevOps) connection configured in your Fabric tenant
+
+```
+Workspace  →  Git repo directory
+────────────────────────────────────────────────────────────
+Road4_Bronze_Dev  →  Bronze/   (branch: road4_example_project)
+Road4_Silver_Dev  →  Silver/
+Road4_Gold_Dev    →  Gold/
+```
+
+### Mode 2 — REST API (alternate)
+
+Creates workspaces and deploys each item (lakehouses, notebooks, pipelines) individually via the Fabric REST API. Items receive Fabric-generated GUIDs as their item IDs.
+
+- Suitable for testing and CI pipelines where Git integration is not configured
+- `notebookId` values in pipeline definitions are automatically resolved to the correct deployed IDs
+
+## Deployment Model
+
+The deployment creates **one Fabric workspace per tier per environment**:
+
+| Tier | Prod | Dev | Staging | Feature |
+|------|------|-----|---------|----------|
+| **Bronze** | `Road4_Bronze` | `Road4_Bronze_Dev` | `Road4_Bronze_Staging` | `Road4_Bronze_Feature` |
+| **Silver** | `Road4_Silver` | `Road4_Silver_Dev` | `Road4_Silver_Staging` | `Road4_Silver_Feature` |
+| **Gold** | `Road4_Gold` | `Road4_Gold_Dev` | `Road4_Gold_Staging` | `Road4_Gold_Feature` |
+
+Each workspace contains:
+- All lakehouses discovered in that tier's `Lakehouses/` folder (e.g., both `raw_lakehouse` and `bronze_lakehouse` in Bronze workspaces)
+- All notebooks discovered in that tier's `Notebooks/` folder
+- All DataPipelines discovered in that tier's `DataPipelines/` folder
+
+Items are discovered automatically by scanning for `.platform` files — **no config changes needed when you add new items** to a tier folder.
 
 ## Repository Structure
 
@@ -8,43 +53,49 @@ The repository uses a multi-tier architecture with consolidated assets per tier:
 
 ```
 Bronze/
-  Lakehouses/         # Raw and bronze Fabric lakehouse assets
-  DataPipelines/      # Bronze Fabric datapipeline asset
-  Notebooks/          # Shared ingestion notebooks
-  Pipelines/          # Bronze tier JSON pipeline definition
+  Lakehouses/
+    raw_lakehouse.Lakehouse/          # Raw landing lakehouse
+    bronze_lakehouse.Lakehouse/       # Bronze processing lakehouse
+  DataPipelines/
+    bronze_ingestion_pipeline.DataPipeline/   # Fabric datapipeline item
+  Notebooks/
+    01_ingest_raw_sales.Notebook/     # Raw sales ingestion notebook
+    01_ingest_raw_sales_python.Notebook/
+  Pipelines/
+    bronze_ingest_pipeline.json       # Fallback JSON pipeline definition
 
 Silver/
-  Lakehouses/         # Silver Fabric lakehouse asset
-  DataPipelines/      # Silver Fabric datapipeline asset
-  Notebooks/          # Shared transformation notebooks
-  Pipelines/          # Silver tier JSON pipeline definition
+  Lakehouses/
+    silver_lakehouse.Lakehouse/
+  DataPipelines/
+    silver_transform_pipeline.DataPipeline/
+  Notebooks/
+    02_clean_sales_data.Notebook/
+  Pipelines/
+    silver_transform_pipeline.json
 
 Gold/
-  Lakehouses/         # Gold Fabric lakehouse asset
-  DataPipelines/      # Gold Fabric datapipeline asset
-  Notebooks/          # Shared curation notebooks
-  Pipelines/          # Gold tier JSON pipeline definition
+  Lakehouses/
+    gold_lakehouse.Lakehouse/
+  DataPipelines/
+    gold_curated_pipeline.DataPipeline/
+  Notebooks/
+    03_curate_sales_mart.Notebook/
+  Pipelines/
+    gold_curated_pipeline.json
 ```
 
-The deployment creates these Fabric workspaces by default:
-- `dev`
-- `prod`
-- `feature`
-- `staging`
+### Auto-Discovery
 
-Inside each workspace, the deployment creates these medallion lakehouses:
-- `raw_lakehouse`
-- `bronze_lakehouse`
-- `silver_lakehouse`
-- `gold_lakehouse`
+The deployment script **automatically discovers** all Fabric items in each tier folder by scanning for `.platform` files. Every `.Lakehouse`, `.Notebook`, and `.DataPipeline` folder that contains a `.platform` file is picked up and deployed — no configuration changes are needed when you add new items.
 
-It deploys the medallion notebooks from the `Bronze/Notebooks/`, `Silver/Notebooks/`, and `Gold/Notebooks/` folders into each workspace.
-It also deploys pipeline definitions from `Bronze/Pipelines/`, `Silver/Pipelines/`, and `Gold/Pipelines/`.
+| Tier | Discovered lakehouses | Discovered notebooks | Discovered DataPipelines |
+|------|----------------------|----------------------|--------------------------|
+| **Bronze** | `raw_lakehouse`, `bronze_lakehouse` | `01_ingest_raw_sales_python`, `01_ingest_raw_sales` | `bronze_ingestion_pipeline` |
+| **Silver** | `silver_lakehouse` | `02_clean_sales_data` | `silver_transform_pipeline` |
+| **Gold** | `gold_lakehouse` | `03_curate_sales_mart` | `gold_curated_pipeline` |
 
-The repository also keeps the corresponding Fabric artifact folders under each tier:
-- `Bronze/Lakehouses/` and `Bronze/DataPipelines/`
-- `Silver/Lakehouses/` and `Silver/DataPipelines/`
-- `Gold/Lakehouses/` and `Gold/DataPipelines/`
+The `tier_lakehouses`, `tier_notebooks`, and `tier_pipelines` settings in the params file act as a **fallback** for any items not in the folder structure. Folder discovery always takes precedence.
 
 ## Prerequisites
 
@@ -72,26 +123,32 @@ Default values:
 
 ```json
 {
-  "prefix": "medallion",
-  "environments": "dev,prod,feature,staging",
-  "medallion_lakehouses": "raw,bronze,silver,gold",
-  "capacity_id": null,
+  "prefix": "Road4",
+  "tiers": "Bronze,Silver,Gold",
+  "environments": "Dev,Prod,Staging,Feature",
+  "prod_environment": "Prod",
+  "capacity_id": "667C93CA-2177-448B-B39B-EA656D994404",
   "workspace_description": "Managed by deploy_medallion_workspaces.py",
   "notebook_dir": ".",
-  "lakehouse_suffix": "lakehouse",
-  "workspace_ids_output": "infra/workspace_ids.json"
+  "workspace_ids_output": "infra/workspace_ids.json",
+  "workspace_names": { ... },
+  "tier_lakehouses": { ... },
+  "tier_notebooks": { ... },
+  "tier_pipelines": { ... }
 }
 ```
 
 Key settings:
-- `environments` - Fabric workspaces to create/deploy to (e.g., dev, prod, feature, staging)
+- `tiers` - Medallion tiers to deploy per environment (Bronze, Silver, Gold)
+- `environments` - Environment names to create per tier (Dev, Prod, Staging, Feature)
+- `prod_environment` - Which environment gets no suffix in workspace names (default: Prod)
 - `notebook_dir` - Base directory containing the `Bronze/`, `Silver/`, and `Gold/` notebook folders
 
 You can further customize:
-- Workspace names under `workspace_names`
-- Lakehouse names under `lakehouse_names`
-- Notebook files under `notebooks`
-- Pipeline files under `pipelines_by_layer`
+- Workspace names under `workspace_names` (keyed as `{Tier}_{Environment}`, e.g., `Bronze_Prod`)
+- Lakehouse names under `tier_lakehouses` (keyed by tier)
+- Notebook files under `tier_notebooks` (keyed by tier)
+- Pipeline files under `tier_pipelines` (keyed by tier)
 - Capacity assignment by setting `capacity_id`
 
 ## Step 3: Authenticate with Azure
@@ -104,25 +161,120 @@ This signs you in and allows the scripts to retrieve a Fabric API token.
 
 ## Step 4: Run the Workspace Deployment Script
 
-### Recommended Command
+### Default Mode — Git Integration (`--git-sync`)
+
+#### Deploy All Tiers, All Environments
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync
+```
+
+#### Deploy a Single Environment Across All Tiers
+
+**Deploy Dev environment only** (Bronze_Dev, Silver_Dev, Gold_Dev):
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --workspace Dev
+```
+
+**Deploy Prod environment only** (Road4_Bronze, Road4_Silver, Road4_Gold):
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --workspace Prod
+```
+
+### Alternate Mode — REST API
+
+#### Deploy All Tiers, All Environments
+
+> REST API example (alternate mode):
 
 ```bash
 python scripts/deploy_medallion_workspaces.py --interactive
 ```
 
-This uses `--workspace all` by default.
+#### Deploy a Single Environment Across All Tiers
 
-This command will:
-- Read `infra/medallion_workspace_params.json`
-- Create or reuse the `dev`, `prod`, `feature`, and `staging` workspaces
-- Create or reuse the medallion lakehouses inside each workspace
-- Deploy all pipelines into each workspace
-- Update existing notebooks in place (copy latest code/JSON definition without deleting the notebook item)
-- Replace existing pipelines when the source artifact has been redeployed
-- Deploy notebooks from `Bronze/Notebooks/`, `Silver/Notebooks/`, and `Gold/Notebooks/`
-- Write workspace and lakehouse IDs to `infra/workspace_ids.json`
+**Deploy Dev environment only** (Bronze_Dev, Silver_Dev, Gold_Dev):
+
+> REST API example (alternate mode):
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --workspace Dev
+```
+
+**Deploy Prod environment only** (Road4_Bronze, Road4_Silver, Road4_Gold):
+
+> REST API example (alternate mode):
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --workspace Prod
+```
+
+**Deploy Staging and Feature environments only**:
+
+> REST API example (alternate mode):
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --workspace Staging
+python scripts/deploy_medallion_workspaces.py --interactive --workspace Feature
+```
+
+### Deploy Specific Tiers Only
+
+**Deploy Bronze tier only** (all environments):
+
+> REST API example (alternate mode):
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --tiers Bronze
+```
+
+**Deploy Bronze and Silver tiers** (all environments):
+
+> REST API example (alternate mode):
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --tiers Bronze,Silver
+```
+
+### Combine Tier and Environment Filters
+
+**Deploy Bronze tier, Dev environment only** (Road4_Bronze_Dev):
+
+> REST API example (alternate mode):
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --tiers Bronze \
+  --workspace Dev
+```
+
+**Deploy Bronze and Silver tiers, Prod environment only** (Road4_Bronze, Road4_Silver):
+
+> REST API example (alternate mode):
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --tiers Bronze,Silver \
+  --workspace Prod
+```
+
+**Deploy all tiers, Dev and Staging only**:
+
+> REST API example (alternate mode):
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --environments Dev,Staging
+```
 
 ### Run with Explicit Token
+
+> REST API example (alternate mode):
 
 ```bash
 export FABRIC_TOKEN=$(az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken -o tsv)
@@ -132,39 +284,35 @@ python scripts/deploy_medallion_workspaces.py --token "$FABRIC_TOKEN"
 
 ### Override the Parameters File
 
+> REST API example (alternate mode):
+
 ```bash
 python scripts/deploy_medallion_workspaces.py \
   --interactive \
   --params-file infra/medallion_workspace_params.json
 ```
 
-### Deploy to a Specific Workspace
+### Override Tiers or Environments at Runtime
 
-Use the `--workspace` selector to target one environment or all environments.
-
-Deploy only `dev`:
+> REST API example (alternate mode):
 
 ```bash
 python scripts/deploy_medallion_workspaces.py \
   --interactive \
-  --workspace dev
+  --tiers Silver,Gold
 ```
 
-Deploy only `prod`:
-
-Deploy all configured environments:
+> REST API example (alternate mode):
 
 ```bash
 python scripts/deploy_medallion_workspaces.py \
   --interactive \
-  --workspace all
+  --environments Dev,Prod
 ```
-
-Notes:
-- `--workspace all` deploys every environment listed in `environments` from the params file (or `--environments` if provided).
-- Valid values are `dev`, `prod`, `feature`, `staging`, and `all`.
 
 ### Override Capacity at Runtime
+
+> REST API example (alternate mode):
 
 ```bash
 python scripts/deploy_medallion_workspaces.py \
@@ -174,39 +322,46 @@ python scripts/deploy_medallion_workspaces.py \
 
 ### Skip Notebook Re-deployment
 
+> REST API example (alternate mode):
+
 ```bash
 python scripts/deploy_medallion_workspaces.py \
   --interactive \
   --skip-existing-notebooks
 ```
 
-### Notebook Update Behavior (Examples)
+### Notebook Update Behavior
 
 By default, notebook deployment is **upsert** behavior:
 - If the notebook does not exist in the target workspace, it is created.
 - If the notebook already exists, its definition is updated in place using Fabric `updateDefinition`.
 
-This means rerunning deployment to `dev` copies the latest notebook code from the tier notebook folders into the existing `dev` notebook item without deleting it.
+This means rerunning deployment copies the latest notebook code from the tier notebook folders into the existing tier-specific workspace notebooks without deleting them.
 
-Deploy to `dev` and update notebook content in place:
+**Deploy Dev environment and update notebook content in place**:
+
+> REST API example (alternate mode):
 
 ```bash
 python scripts/deploy_medallion_workspaces.py \
   --interactive \
-  --workspace dev \
-  --skip-existing-pipelines
+  --workspace Dev
 ```
 
-Create-only notebook behavior (do not update existing notebooks):
+**Create-only notebook behavior (do not update existing notebooks)**:
+
+> REST API example (alternate mode):
 
 ```bash
 python scripts/deploy_medallion_workspaces.py \
   --interactive \
-  --workspace dev \
+  --workspace Dev \
   --skip-existing-notebooks
 ```
 
 ### Skip Pipeline Re-deployment
+
+> REST API example (alternate mode):
 
 ```bash
 python scripts/deploy_medallion_workspaces.py \
@@ -220,6 +375,8 @@ By default, rerunning the deployment script updates notebooks in place and repla
 
 Use `--workspaces-only` to provision (or verify) workspaces and optionally assign capacity without touching any lakehouses, notebooks, or pipelines:
 
+> REST API example (alternate mode):
+
 ```bash
 python scripts/deploy_medallion_workspaces.py \
   --interactive \
@@ -227,6 +384,8 @@ python scripts/deploy_medallion_workspaces.py \
 ```
 
 Combine with `--workspace` to target a single environment:
+
+> REST API example (alternate mode):
 
 ```bash
 python scripts/deploy_medallion_workspaces.py \
@@ -237,17 +396,109 @@ python scripts/deploy_medallion_workspaces.py \
 
 This is useful when you want to pre-create workspaces and assign them to a capacity before deploying any artifacts.
 
+---
+
+### Additional Git Integration Examples (`--git-sync`)
+
+`--git-sync` is the default deployment path for this repository because it keeps workspace items aligned to Git `logicalId` values and avoids post-deploy sync conflicts.
+
+Git connection details are read from `infra/medallion_workspace_params.json` (`git_connection` key) or supplied via CLI flags.
+
+#### Git credentials for `--git-sync`
+
+`deploy_medallion_workspaces.py` supports these Fabric `myGitCredentials.source` values:
+
+- `Automatic`
+- `ConfiguredConnection`
+
+For GitHub tenants where `Automatic` is not supported, use `ConfiguredConnection` and provide a Fabric connection ID:
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --git-sync \
+  --git-credential-type ConfiguredConnection \
+  --git-connection-id <fabric-connection-id>
+```
+
+#### Sync all tiers and environments from Git
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync
+```
+
+#### Sync Dev environments only (Bronze/Silver/Gold Dev)
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --workspace Dev
+```
+
+#### Sync a single tier from Git
+
+```bash
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --tiers Bronze
+```
+
+#### Override Git connection at runtime
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --git-sync \
+  --git-provider GitHub \
+  --git-org JakeGarnerPS \
+  --git-repo GitToFabricDeployment \
+  --git-branch road4_example_project
+```
+
+#### Azure DevOps repo
+
+```bash
+python scripts/deploy_medallion_workspaces.py \
+  --interactive \
+  --git-sync \
+  --git-provider AzureDevOps \
+  --git-org MyOrg \
+  --git-project MyProject \
+  --git-repo MyRepo \
+  --git-branch main
+```
+
+> **Note:** `--git-sync` requires a GitHub or Azure DevOps connection to be configured in your Fabric tenant settings before running.
+>
+> **Note:** If you get `GitCredentialsConfigurationNotSupported` with `source=Automatic`, switch to `--git-credential-type ConfiguredConnection` and pass `--git-connection-id`.
+
 ## What the Deployment Script Does
 
-The script `scripts/deploy_medallion_workspaces.py` performs the following steps:
+### Mode 1 — Git Integration (`--git-sync`) (default)
 
 1. Reads configuration from `infra/medallion_workspace_params.json`
-2. Creates or reuses each environment workspace
-3. Optionally assigns each workspace to the configured Fabric capacity
-4. Creates or reuses the medallion lakehouses in each workspace  *(skipped with `--workspaces-only`)*
-5. Creates or replaces the Bronze, Silver, and Gold pipelines in each workspace  *(skipped with `--workspaces-only`)*
-6. Uploads notebook files or updates existing notebook definitions in place in each workspace  *(skipped with `--workspaces-only`)*
-7. Writes a manifest file at `infra/workspace_ids.json`
+2. For each tier (`Bronze`, `Silver`, `Gold`), scans the tier folder for Fabric items:
+   - Walks `Bronze/`, `Silver/`, `Gold/` looking for `.platform` files
+   - Auto-discovers all `.Lakehouse`, `.Notebook`, and `.DataPipeline` item folders
+   - Captures the `logicalId` from each `.platform` file
+3. For each tier and environment combination:
+   - Creates or reuses the tier-environment workspace (e.g., `Road4_Bronze_Dev`)
+   - Optionally assigns the workspace to the configured Fabric capacity
+4. For each tier-environment workspace *(skipped with `--workspaces-only`)*:
+   - Uploads or updates **all discovered notebooks**; builds a `logicalId → deployedId` map
+   - Creates or reuses **all discovered lakehouses**
+   - Deploys **all discovered DataPipeline folders** — `notebookId` values in `pipeline-content.json` are resolved using the `logicalId → deployedId` map so references match the newly deployed notebooks
+5. Writes a manifest file at `infra/workspace_ids.json`
+
+### Mode 2 — REST API (alternate)
+
+1. Reads configuration from `infra/medallion_workspace_params.json`
+2. For each tier and environment combination:
+   - Creates or reuses the tier-environment workspace
+   - Optionally assigns the workspace to capacity
+   - Connects the workspace to this Git repo at the tier directory (e.g., `Bronze/` for Bronze workspaces)
+   - Calls `initializeConnection (PreferRemote)` (first run) or `updateFromGit (PreferRemote)` (subsequent runs)
+   - Fabric creates/updates all items from the `.platform` files with correct `logicalId` values
+   - Notebook ID references in pipeline definitions are resolved automatically by Fabric
+3. Lists all items in each workspace to populate `infra/workspace_ids.json`
+
+**Result:** 12 workspaces (3 tiers × 4 environments) or a subset if filtered by `--tiers` or `--workspace`.
 
 ## Output File
 
@@ -256,11 +507,11 @@ After deployment, the script writes:
 - `infra/workspace_ids.json`
 
 This file contains:
-- Workspace environment name
-- Workspace display name
-- Workspace ID
-- Lakehouse names and IDs for that workspace
-- Pipeline names and IDs for that workspace
+- Tier and environment for each workspace
+- Workspace display name (e.g., `Road4_Bronze_Dev`)
+- Workspace ID (GUID)
+- Lakehouse names and IDs for that workspace (tier-specific)
+- Pipeline names and IDs for that workspace (tier-specific)
 
 You can use this file for follow-up automation, including bulk capacity assignment.
 
@@ -297,17 +548,22 @@ python scripts/assign_workspaces_to_capacity.py \
 
 ## Step 6: Verify in Fabric
 
-For each workspace (`dev`, `prod`, `feature`, `staging`):
+After deployment, verify the workspace structure in Fabric:
+
+**For each tier and environment combination**, navigate to the corresponding workspace (e.g., `Road4_Bronze_Dev`, `Road4_Silver_Prod`, etc.):
 
 1. Open the workspace in Fabric
-2. Verify the workspace exists
-3. Confirm these lakehouses exist:
-   - `raw_lakehouse`
-   - `bronze_lakehouse`
-   - `silver_lakehouse`
-   - `gold_lakehouse`
-4. Verify the notebooks appear in the workspace
-5. If capacity assignment was enabled, verify the workspace is attached to the expected capacity
+2. Verify the workspace exists and is named correctly
+3. Verify **only the tier's lakehouse** exists (e.g., `bronze_lakehouse` in Bronze workspaces)
+4. Verify the tier's notebooks appear (e.g., Bronze ingestion notebooks in `Road4_Bronze_Dev`)
+5. Verify the tier's pipelines appear (e.g., bronze ingest pipeline in `Road4_Bronze_Dev`)
+6. If capacity assignment was enabled, verify the workspace is attached to the expected capacity
+
+**Example verification checklist:**
+- `Road4_Bronze` → contains `raw_lakehouse` + `bronze_lakehouse` + Bronze notebooks + `bronze_ingestion_pipeline`
+- `Road4_Bronze_Dev` → same contents as `Road4_Bronze` (same tier, different environment)
+- `Road4_Silver` → contains `silver_lakehouse` + Silver notebooks + `silver_transform_pipeline`
+- `Road4_Gold_Staging` → contains `gold_lakehouse` + Gold notebooks + `gold_curated_pipeline`
 
 ## Troubleshooting
 
@@ -332,8 +588,8 @@ For each workspace (`dev`, `prod`, `feature`, `staging`):
 ### Notebook Deployment Fails
 
 - Verify the notebook base directory exists and contains `Bronze/Notebooks/`, `Silver/Notebooks/`, and `Gold/Notebooks/`
-- Ensure the `.Notebook` folders listed in `notebooks` exist
-- Check for invalid notebook JSON or unsupported content
+- Each `.Notebook` folder must contain a `.platform` file (used for auto-discovery) and a `notebook-content.py` file
+- Check for invalid notebook content in `notebook-content.py`
 - If an update call fails in your tenant, rerun once after a short delay (newly created items can be briefly unavailable)
 - Confirm your identity has permissions to update notebook definitions in the target workspace
 
@@ -348,12 +604,38 @@ For each workspace (`dev`, `prod`, `feature`, `staging`):
 Use this sequence for a normal deployment:
 
 ```bash
+# Step 1: Authenticate
 az login
-python scripts/deploy_medallion_workspaces.py --interactive
+
+# Step 2: Deploy all tiers and environments (default: Git sync)
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync
+
+# Step 3: (Optional) Assign workspaces to capacity if not done during deployment
 python scripts/assign_workspaces_to_capacity.py --interactive --capacity-id <fabric-capacity-id>
 ```
 
-Or, if the capacity should be applied during deployment:
+Or, to deploy incrementally:
+
+```bash
+# Deploy Prod environment first (all tiers, Git sync)
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --workspace Prod
+
+# Deploy Dev environment (all tiers, Git sync)
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --workspace Dev
+
+# Deploy Staging and Feature later
+python scripts/deploy_medallion_workspaces.py --interactive --git-sync --environments Staging,Feature
+```
+
+Or, to deploy one tier at a time:
+
+```bash
+# Deploy Bronze tier first (all environments)
+python scripts/deploy_medallion_workspaces.py --interactive --tiers Bronze
+
+# Deploy Silver and Gold tiers later
+python scripts/deploy_medallion_workspaces.py --interactive --tiers Silver,Gold
+```
 
 ```bash
 az login
