@@ -1,54 +1,31 @@
 {
-  "generatedAtUtc": "2026-03-20T14:44:44.666498+00:00",
+  "generatedAtUtc": "2026-03-27T14:57:41.626534+00:00",
   "capacityId": "667C93CA-2177-448B-B39B-EA656D994404",
   "sourceParametersFile": "infra/medallion_workspace_params.json",
   "workspaces": [
     {
-      "environment": "dev",
-      "workspaceName": "medallion-dev",
-      "workspaceId": "bafe69f9-6a07-4f62-a1bc-de1fef9e9086",
-      "lakehouses": [
-        {
-          "name": "raw_lakehouse",
-          "id": "d1da7399-0b88-460e-98a8-a4f84c9d54c8",
-          "medallionLayer": "raw"
-        },
-        {
-          "name": "bronze_lakehouse",
-          "id": "468c2a4f-43de-458c-97da-0f4f71fe3480",
-          "medallionLayer": "bronze"
-        },
-        {
-          "name": "silver_lakehouse",
-          "id": "ab886043-371e-4845-964c-e332188cc692",
-          "medallionLayer": "silver"
-        },
-        {
-          "name": "gold_lakehouse",
-          "id": "83bb4810-a6e7-445e-b3a6-4c153349bf48",
-          "medallionLayer": "gold"
-        }
-      ],
-      "pipelines": [
-        {
-          "name": "bronze_ingestion_pipeline",
-          "id": "bronze_ingestion_pipeline",
-          "medallionLayer": "bronze",
-          "sourcePath": "bronze/pipelines/bronze_ingest_pipeline.json"
-        },
-        {
-          "name": "silver_transform_pipeline",
-          "id": "silver_transform_pipeline",
-          "medallionLayer": "silver",
-          "sourcePath": "silver/pipelines/silver_transform_pipeline.json"
-        },
-        {
-          "name": "gold_curated_pipeline",
-          "id": "gold_curated_pipeline",
-          "medallionLayer": "gold",
-          "sourcePath": "gold/pipelines/gold_curated_pipeline.json"
-        }
-      ]
+      "tier": "Bronze",
+      "environment": "Dev",
+      "workspaceName": "Road4_Bronze_Dev",
+      "workspaceId": "763c0410-1ec8-4b37-8d60-db540fe2958a",
+      "lakehouses": [],
+      "pipelines": []
+    },
+    {
+      "tier": "Silver",
+      "environment": "Dev",
+      "workspaceName": "Road4_Silver_Dev",
+      "workspaceId": "8a32014f-b366-4218-b0a2-059a90372ad5",
+      "lakehouses": [],
+      "pipelines": []
+    },
+    {
+      "tier": "Gold",
+      "environment": "Dev",
+      "workspaceName": "Road4_Gold_Dev",
+      "workspaceId": "26b0b80c-3ab9-4693-bb8b-14198ffc3b43",
+      "lakehouses": [],
+      "pipelines": []
     }
   ]
 }

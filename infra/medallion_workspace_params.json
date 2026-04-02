@@ -1,39 +1,60 @@
 {
-  "prefix": "medallion",
-  "environments": "dev,prod,feature,staging",
-  "medallion_lakehouses": "raw,bronze,silver,gold",
+  "prefix": "Road4",
+  "tiers": "Bronze,Silver,Gold",
+  "environments": "Dev,Prod,Staging,Feature",
+  "prod_environment": "Prod",
   "capacity_id": "667C93CA-2177-448B-B39B-EA656D994404",
   "workspace_description": "Managed by deploy_medallion_workspaces.py",
-  "notebook_dir": "Medallion",
-  "lakehouse_suffix": "lakehouse",
+  "notebook_dir": ".",
   "workspace_ids_output": "infra/workspace_ids.json",
+  "git_connection": {
+    "git_provider_type": "GitHub",
+    "owner_name": "JakeGarnerPS",
+    "repository_name": "GitToFabricDeployment",
+    "branch_name": "road4_example_project",
+    "git_credential_type": "ConfiguredConnection",
+    "git_connection_id": "06367384-5c07-47cb-9885-bcb5123c7bbd"
+  },
   "workspace_names": {
-    "dev": "medallion-dev",
-    "prod": "medallion-prod",
-    "feature": "medallion-feature",
-    "staging": "medallion-staging"
+    "Bronze_Dev": "Road4_Bronze_Dev",
+    "Bronze_Prod": "Road4_Bronze",
+    "Bronze_Staging": "Road4_Bronze_Staging",
+    "Bronze_Feature": "Road4_Bronze_Feature",
+    "Silver_Dev": "Road4_Silver_Dev",
+    "Silver_Prod": "Road4_Silver",
+    "Silver_Staging": "Road4_Silver_Staging",
+    "Silver_Feature": "Road4_Silver_Feature",
+    "Gold_Dev": "Road4_Gold_Dev",
+    "Gold_Prod": "Road4_Gold",
+    "Gold_Staging": "Road4_Gold_Staging",
+    "Gold_Feature": "Road4_Gold_Feature"
   },
-  "lakehouse_names": {
-    "raw": "raw_lakehouse",
-    "bronze": "bronze_lakehouse",
-    "silver": "silver_lakehouse",
-    "gold": "gold_lakehouse"
+  "tier_lakehouses": {
+    "Bronze": "bronze_lakehouse",
+    "Silver": "silver_lakehouse",
+    "Gold": "gold_lakehouse"
   },
-  "notebooks": [
-    "01_ingest_raw_sales_python.ipynb",
-    "01_ingest_raw_sales.ipynb",
-    "02_clean_sales_data.ipynb",
-    "03_curate_sales_mart.ipynb"
-  ],
-  "pipelines_by_layer": {
-    "bronze": [
-      "bronze/pipelines/bronze_ingest_pipeline.json"
+  "tier_notebooks": {
+    "Bronze": [
+      "Bronze/Notebooks/01_ingest_raw_sales_python.Notebook",
+      "Bronze/Notebooks/01_ingest_raw_sales.Notebook"
     ],
-    "silver": [
-      "silver/pipelines/silver_transform_pipeline.json"
+    "Silver": [
+      "Silver/Notebooks/02_clean_sales_data.Notebook"
     ],
-    "gold": [
-      "gold/pipelines/gold_curated_pipeline.json"
+    "Gold": [
+      "Gold/Notebooks/03_curate_sales_mart.Notebook"
+    ]
+  },
+  "tier_pipelines": {
+    "Bronze": [
+      "Bronze/Pipelines/bronze_ingest_pipeline.json"
+    ],
+    "Silver": [
+      "Silver/Pipelines/silver_transform_pipeline.json"
+    ],
+    "Gold": [
+      "Gold/Pipelines/gold_curated_pipeline.json"
     ]
   }
 }

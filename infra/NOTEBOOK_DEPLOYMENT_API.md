@@ -38,7 +38,7 @@ This provides a valid JWT token that authenticates requests to the Fabric API.
 The deployment script (`scripts/deploy_notebooks.py`) performs these steps:
 
 ```
-1. Load notebook file (.ipynb) as JSON
+1. Read `notebook-content.py` from the `.Notebook` folder
    ↓
 2. Base64 encode the notebook content
    ↓
@@ -63,10 +63,9 @@ The Fabric API requires the notebook definition in this format:
 {
   "displayName": "notebook_name",
   "definition": {
-    "format": "ipynb",
     "parts": [
       {
-        "path": "notebook-content.ipynb",
+        "path": "notebook-content.py",
         "payloadType": "InlineBase64",
         "payload": "<base64_encoded_notebook_content>"
       }
@@ -77,8 +76,8 @@ The Fabric API requires the notebook definition in this format:
 
 **Critical fields:**
 - `payloadType`: Must be `"InlineBase64"`
-- `path`: Must reference `.ipynb` extension
-- `payload`: Must be base64-encoded JSON string
+- `path`: Must be `"notebook-content.py"` (Fabric native format)
+- `payload`: Must be base64-encoded content of `notebook-content.py`
 
 ## Usage
 
@@ -88,7 +87,7 @@ The Fabric API requires the notebook definition in this format:
 # From repository root
 python scripts/deploy_notebooks.py \
   --workspace-id 7eb1a274-c608-4211-9bfc-3127ac351715 \
-  --notebook-dir Medallion \
+  --notebook-dir . \
   --token $(az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken -o tsv)
 ```
 
@@ -101,14 +100,14 @@ export FABRIC_TOKEN=$(az account get-access-token --resource https://api.fabric.
 # Deploy
 python scripts/deploy_notebooks.py \
   --workspace-id 7eb1a274-c608-4211-9bfc-3127ac351715 \
-  --notebook-dir Medallion \
+  --notebook-dir . \
   --token "$FABRIC_TOKEN"
 ```
 
 ### Parameters
 
 - `--workspace-id` (required): Your Fabric workspace ID
-- `--notebook-dir` (optional): Directory containing `.ipynb` files (default: current directory)
+- `--notebook-dir` (optional): Directory containing `.Notebook` folders (default: current directory)
 - `--token` (required): Azure access token for Fabric API
 - `--skip-existing` (optional): Skip notebooks that already exist
 
@@ -116,13 +115,14 @@ python scripts/deploy_notebooks.py \
 
 ### Detection of Notebooks
 
-The script looks for `.ipynb` files defined in the `NOTEBOOKS` list:
+The script looks for `.Notebook` folders defined in the `NOTEBOOKS` list:
 
 ```python
 NOTEBOOKS = [
-    "01_ingest_raw_sales.ipynb",
-    "02_clean_sales_data.ipynb",
-    "03_curate_sales_mart.ipynb"
+  "Bronze/Notebooks/01_ingest_raw_sales.Notebook",
+  "Bronze/Notebooks/01_ingest_raw_sales_python.Notebook",
+  "Silver/Notebooks/02_clean_sales_data.Notebook",
+  "Gold/Notebooks/03_curate_sales_mart.Notebook"
 ]
 ```
 
@@ -209,7 +209,7 @@ name: Deploy Notebooks to Fabric
 on:
   push:
     branches: [road4_CI_CD]
-    paths: ['Medallion/*.ipynb']
+    paths: ['Bronze/Notebooks/**/*.Notebook', 'Silver/Notebooks/**/*.Notebook', 'Gold/Notebooks/**/*.Notebook']
 
 jobs:
   deploy:
@@ -224,7 +224,7 @@ jobs:
           TOKEN=$(az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken -o tsv)
           python scripts/deploy_notebooks.py \
             --workspace-id ${{ secrets.FABRIC_WORKSPACE_ID }} \
-            --notebook-dir Medallion \
+            --notebook-dir . \
             --token $TOKEN
 ```
 
@@ -234,15 +234,16 @@ Deploy notebooks on a schedule:
 
 ```bash
 # In a cron job or scheduled task
-0 9 * * * cd /path/to/repo && python scripts/deploy_notebooks.py --workspace-id <id> --notebook-dir Medallion --token $(az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken -o tsv)
+0 9 * * * cd /path/to/repo && python scripts/deploy_notebooks.py --workspace-id <id> --notebook-dir . --token $(az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken -o tsv)
 ```
 
 ## Files Created/Modified
 
 - **`scripts/deploy_notebooks.py`** - Main deployment script
-- `Medallion/01_ingest_raw_sales.ipynb` - Notebook (uploaded)
-- `Medallion/02_clean_sales_data.ipynb` - Notebook (uploaded)
-- `Medallion/03_curate_sales_mart.ipynb` - Notebook (uploaded)
+- `Bronze/Notebooks/01_ingest_raw_sales.Notebook` - Notebook (uploaded)
+- `Bronze/Notebooks/01_ingest_raw_sales_python.Notebook` - Notebook (uploaded)
+- `Silver/Notebooks/02_clean_sales_data.Notebook` - Notebook (uploaded)
+- `Gold/Notebooks/03_curate_sales_mart.Notebook` - Notebook (uploaded)
 
 ## References
 

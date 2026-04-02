@@ -138,7 +138,7 @@ If the script fails, you can manually upload the data:
 Once the lakehouse is deployed:
 
 1. Set up **Git integration** in your Fabric workspace to pull notebooks and pipelines
-2. Configure the workspace root as `Medallion/` in Git settings
+2. Configure the workspace root as the repository root in Git settings so Fabric can see `Bronze/`, `Silver/`, and `Gold/`
 3. Verify that notebooks appear in the workspace
 4. Run the notebooks to load data through the medallion architecture (Bronze → Silver → Gold)
 

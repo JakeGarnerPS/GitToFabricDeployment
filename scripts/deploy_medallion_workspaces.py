@@ -32,18 +32,30 @@ import requests
 
 
 FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1"
-DEFAULT_ENVIRONMENTS = ["dev", "prod", "feature", "staging"]
-DEFAULT_MEDALLION_LAKEHOUSES = ["raw", "bronze", "silver", "gold"]
-DEFAULT_NOTEBOOKS = [
-    "01_ingest_raw_sales_python.ipynb",
-    "01_ingest_raw_sales.ipynb",
-    "02_clean_sales_data.ipynb",
-    "03_curate_sales_mart.ipynb",
-]
-DEFAULT_PIPELINES_BY_LAYER = {
-    "bronze": ["bronze/pipelines/bronze_ingest_pipeline.json"],
-    "silver": ["silver/pipelines/silver_transform_pipeline.json"],
-    "gold": ["gold/pipelines/gold_curated_pipeline.json"],
+DEFAULT_TIERS = ["Bronze", "Silver", "Gold"]
+DEFAULT_ENVIRONMENTS = ["Dev", "Prod", "Staging", "Feature"]
+DEFAULT_PROD_ENVIRONMENT = "Prod"  # This environment gets no suffix in workspace names
+DEFAULT_TIER_LAKEHOUSES = {
+    "bronze": "bronze_lakehouse",
+    "silver": "silver_lakehouse",
+    "gold": "gold_lakehouse",
+}
+DEFAULT_TIER_NOTEBOOKS = {
+    "bronze": [
+        "Bronze/Notebooks/01_ingest_raw_sales_python.Notebook",
+        "Bronze/Notebooks/01_ingest_raw_sales.Notebook",
+    ],
+    "silver": [
+        "Silver/Notebooks/02_clean_sales_data.Notebook",
+    ],
+    "gold": [
+        "Gold/Notebooks/03_curate_sales_mart.Notebook",
+    ],
+}
+DEFAULT_TIER_PIPELINES = {
+    "bronze": ["Bronze/Pipelines/bronze_ingest_pipeline.json"],
+    "silver": ["Silver/Pipelines/silver_transform_pipeline.json"],
+    "gold": ["Gold/Pipelines/gold_curated_pipeline.json"],
 }
 DEFAULT_PARAMS_FILE = "infra/medallion_workspace_params.json"
 DEFAULT_WORKSPACE_IDS_OUTPUT = "infra/workspace_ids.json"
@@ -51,6 +63,7 @@ PLATFORM_SCHEMA_URL = (
     "https://developer.microsoft.com/json-schemas/"
     "fabric/gitIntegration/platformProperties/2.0.0/schema.json"
 )
+ITEM_NAME_RETRYABLE_ERROR = "ItemDisplayNameNotAvailableYet"
 
 
 class FabricClient:
@@ -238,25 +251,81 @@ class FabricClient:
                 return notebook.get("id")
         return None
 
+    def get_pipeline_id(self, workspace_id: str, display_name: str) -> Optional[str]:
+        for pipeline in self.list_pipelines(workspace_id):
+            if pipeline.get("displayName") == display_name:
+                return pipeline.get("id")
+        return None
+
     def pipeline_exists(self, workspace_id: str, display_name: str) -> bool:
         for pipeline in self.list_pipelines(workspace_id):
             if pipeline.get("displayName") == display_name:
                 return True
         return False
 
-    def create_notebook(self, workspace_id: str, display_name: str, content: dict) -> dict:
+    def delete_notebook(self, workspace_id: str, notebook_id: str) -> None:
+        endpoints = [
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/notebooks/{notebook_id}",
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/items/{notebook_id}",
+        ]
+
+        last_status = None
+        last_error = ""
+
+        for url in endpoints:
+            response = requests.delete(url, headers=self.headers)
+            if response.status_code in (404, 405):
+                last_status = response.status_code
+                last_error = response.text
+                continue
+            if response.status_code not in (200, 202, 204):
+                print(f"   API Response: {response.status_code}")
+                print(f"   Error: {response.text}")
+            response.raise_for_status()
+            return
+
+        raise RuntimeError(
+            "Unable to delete notebook with available Fabric endpoints. "
+            f"Last status: {last_status}, response: {last_error}"
+        )
+
+    def delete_pipeline(self, workspace_id: str, pipeline_id: str) -> None:
+        endpoints = [
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/dataPipelines/{pipeline_id}",
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/items/{pipeline_id}",
+        ]
+
+        last_status = None
+        last_error = ""
+
+        for url in endpoints:
+            response = requests.delete(url, headers=self.headers)
+            if response.status_code in (404, 405):
+                last_status = response.status_code
+                last_error = response.text
+                continue
+            if response.status_code not in (200, 202, 204):
+                print(f"   API Response: {response.status_code}")
+                print(f"   Error: {response.text}")
+            response.raise_for_status()
+            return
+
+        raise RuntimeError(
+            "Unable to delete pipeline with available Fabric endpoints. "
+            f"Last status: {last_status}, response: {last_error}"
+        )
+
+    def create_notebook(self, workspace_id: str, display_name: str, content: str) -> dict:
         url = f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/notebooks"
 
-        notebook_json = json.dumps(content).encode("utf-8")
-        notebook_b64 = base64.b64encode(notebook_json).decode("utf-8")
+        notebook_b64 = base64.b64encode(content.encode("utf-8")).decode("utf-8")
 
         payload = {
             "displayName": display_name,
             "definition": {
-                "format": "ipynb",
                 "parts": [
                     {
-                        "path": "notebook-content.ipynb",
+                        "path": "notebook-content.py",
                         "payloadType": "InlineBase64",
                         "payload": notebook_b64,
                     }
@@ -279,6 +348,51 @@ class FabricClient:
             return {"id": "pending", "displayName": display_name, "status": "pending"}
 
         return response.json()
+
+    def update_notebook(self, workspace_id: str, notebook_id: str, content: str) -> dict:
+        """Update an existing notebook definition in-place."""
+        notebook_b64 = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+
+        payload = {
+            "definition": {
+                "parts": [
+                    {
+                        "path": "notebook-content.py",
+                        "payloadType": "InlineBase64",
+                        "payload": notebook_b64,
+                    }
+                ],
+            },
+        }
+
+        endpoints = [
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/notebooks/{notebook_id}/updateDefinition",
+            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/items/{notebook_id}/updateDefinition",
+        ]
+
+        last_status = None
+        last_error = ""
+
+        for url in endpoints:
+            response = requests.post(url, json=payload, headers=self.headers)
+            if response.status_code in (404, 405):
+                last_status = response.status_code
+                last_error = response.text
+                continue
+            if response.status_code not in (200, 201, 202):
+                print(f"   API Response: {response.status_code}")
+                print(f"   Error: {response.text}")
+            response.raise_for_status()
+
+            if response.status_code == 202:
+                return {"id": notebook_id, "status": "pending"}
+
+            return response.json() if response.text else {"id": notebook_id, "status": "updated"}
+
+        raise RuntimeError(
+            "Unable to update notebook definition with available Fabric endpoints. "
+            f"Last status: {last_status}, response: {last_error}"
+        )
 
     def create_pipeline(self, workspace_id: str, display_name: str, content: dict) -> dict:
         pipeline_definition = normalize_pipeline_definition(content)
@@ -356,6 +470,99 @@ class FabricClient:
 
         return response.json()
 
+    # ── Fabric Git Integration API ─────────────────────────────────────────────
+
+    def get_git_connection(self, workspace_id: str) -> Optional[dict]:
+        """Return the current Git connection for the workspace, or None if not connected."""
+        url = f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/git/connection"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code in (404, 400):
+            return None
+        response.raise_for_status()
+        data = response.json()
+        # A workspace with no Git connection returns an empty or specific payload
+        if not data.get("gitProviderDetails") and not data.get("gitSyncDetails"):
+            return None
+        return data
+
+    def connect_git(self, workspace_id: str, git_provider_details: dict, git_credentials: dict) -> None:
+        """Connect a workspace to a Git repository."""
+        url = f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/git/connect"
+        payload = {
+            "gitProviderDetails": git_provider_details,
+            "myGitCredentials": git_credentials,
+        }
+        response = requests.post(url, json=payload, headers=self.headers)
+        if response.status_code not in (200, 201, 202):
+            print(f"   API Response: {response.status_code}")
+            print(f"   Error: {response.text}")
+        response.raise_for_status()
+
+    def initialize_git_connection(self, workspace_id: str, strategy: str = "PreferRemote") -> dict:
+        """Initialize the Git connection after first connect.
+
+        ``strategy`` is one of:
+          - ``PreferRemote``    — overwrite workspace items with what is in Git (safest for deploy)
+          - ``PreferWorkspace`` — keep workspace items when there is a conflict
+        """
+        url = f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/git/initializeConnection"
+        payload = {"initializationStrategy": strategy}
+        response = requests.post(url, json=payload, headers=self.headers)
+        if response.status_code not in (200, 201, 202):
+            print(f"   API Response: {response.status_code}")
+            print(f"   Error: {response.text}")
+        response.raise_for_status()
+        if response.status_code == 202:
+            data = response.json() if response.text else {}
+            operation_id = (
+                response.headers.get("x-ms-operation-id")
+                or data.get("operationId")
+            )
+            return {"status": "pending", "operationId": operation_id}
+        return {"status": "complete"}
+
+    def update_from_git(self, workspace_id: str) -> dict:
+        """Pull latest changes from Git into the workspace (PreferRemote conflict resolution)."""
+        url = f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/git/updateFromGit"
+        payload = {
+            "conflictResolution": {
+                "conflictResolutionType": "Workspace",
+                "conflictResolutionPolicy": "PreferRemote",
+            },
+            "options": {
+                "allowOverrideItems": True,
+            },
+        }
+        response = requests.post(url, json=payload, headers=self.headers)
+        if response.status_code not in (200, 201, 202):
+            print(f"   API Response: {response.status_code}")
+            print(f"   Error: {response.text}")
+        response.raise_for_status()
+        if response.status_code == 202:
+            data = response.json() if response.text else {}
+            operation_id = (
+                response.headers.get("x-ms-operation-id")
+                or data.get("operationId")
+            )
+            return {"status": "pending", "operationId": operation_id}
+        return {"status": "complete"}
+
+    def poll_long_running_operation(self, operation_id: str, timeout: int = 300) -> dict:
+        """Poll a Fabric long-running operation until it completes or times out."""
+        url = f"{FABRIC_API_BASE_URL}/operations/{operation_id}"
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            response = requests.get(url, headers=self.headers)
+            response.raise_for_status()
+            data = response.json()
+            status = data.get("status", "").lower()
+            if status in ("succeeded", "completed", "failed", "cancelled"):
+                return data
+            time.sleep(5)
+        raise TimeoutError(
+            f"Operation '{operation_id}' did not complete within {timeout}s."
+        )
+
 
 def get_access_token_interactive() -> str:
     """Get a Fabric token from Azure CLI."""
@@ -393,9 +600,14 @@ def choose_existing_notebooks(notebook_dir: str, candidates: List[str]) -> List[
     return found
 
 
-def load_notebook_content(file_path: str) -> dict:
-    with open(file_path, "r", encoding="utf-8") as handle:
-        return json.load(handle)
+def load_notebook_content(path: str) -> str:
+    """Read notebook content from a .Notebook folder (notebook-content.py) or a plain file."""
+    if os.path.isdir(path):
+        py_path = os.path.join(path, "notebook-content.py")
+        with open(py_path, "r", encoding="utf-8") as handle:
+            return handle.read()
+    with open(path, "r", encoding="utf-8") as handle:
+        return handle.read()
 
 
 def load_json_content(file_path: str) -> dict:
@@ -416,6 +628,46 @@ def build_platform_payload_b64(display_name: str, item_type: str) -> str:
         },
     }
     return base64.b64encode(json.dumps(platform).encode("utf-8")).decode("utf-8")
+
+
+def is_retryable_name_lock_error(error: Exception) -> bool:
+    if not isinstance(error, requests.HTTPError):
+        return False
+
+    response = error.response
+    if response is None or response.status_code != 400:
+        return False
+
+    return ITEM_NAME_RETRYABLE_ERROR in response.text
+
+
+def retry_create_after_delete(create_operation, display_name: str, item_kind: str) -> dict:
+    retry_delays = [5, 10, 20, 30]
+    last_error = None
+
+    for attempt_index, delay_seconds in enumerate([0] + retry_delays, start=1):
+        if delay_seconds:
+            print(
+                f"   ⏳ Waiting {delay_seconds}s for deleted {item_kind} name '{display_name}' "
+                "to become available"
+            )
+            time.sleep(delay_seconds)
+
+        try:
+            return create_operation()
+        except Exception as error:  # pylint: disable=broad-except
+            if not is_retryable_name_lock_error(error):
+                raise
+            last_error = error
+            print(
+                f"   ⚠️ Fabric has not released the deleted {item_kind} name '{display_name}' yet "
+                f"(attempt {attempt_index}/{len(retry_delays) + 1})"
+            )
+
+    if last_error is not None:
+        raise last_error
+
+    raise RuntimeError(f"Failed to create {item_kind} '{display_name}' after retries.")
 
 
 def normalize_pipeline_definition(content: dict) -> dict:
@@ -440,7 +692,11 @@ def resolve_notebook_references(
     notebook_id_map: Dict[str, str],
     client: "FabricClient",
 ) -> dict:
-    """Replace notebookName placeholders in TridentNotebook activities with real Fabric IDs."""
+    """Replace notebookName placeholders and stale logicalId references in TridentNotebook
+    activities with real Fabric item IDs for the target workspace.
+
+    ``notebook_id_map`` may be keyed by display name OR by logicalId — both are checked.
+    """
     content = copy.deepcopy(content)
     if "properties" in content:
         activities = content["properties"].get("activities", [])
@@ -450,6 +706,8 @@ def resolve_notebook_references(
     for activity in activities:
         if activity.get("type") == "TridentNotebook":
             type_props = activity.setdefault("typeProperties", {})
+
+            # Resolve notebookName placeholder → real notebookId
             notebook_name = type_props.pop("notebookName", None)
             if notebook_name and "notebookId" not in type_props:
                 nb_id = notebook_id_map.get(notebook_name) or client.get_notebook_id(
@@ -464,6 +722,17 @@ def resolve_notebook_references(
                         "pipeline activity may fail at runtime"
                     )
                     type_props["notebookName"] = notebook_name  # restore placeholder
+
+            # Replace stale logicalId stored as notebookId (written by Git-sync into
+            # pipeline-content.json) with the real Fabric item GUID for this workspace
+            existing_nb_id = type_props.get("notebookId")
+            if existing_nb_id and existing_nb_id in notebook_id_map:
+                type_props["notebookId"] = notebook_id_map[existing_nb_id]
+                type_props["workspaceId"] = workspace_id
+
+            # Patch placeholder workspaceId written by Git-synced pipeline definitions
+            if type_props.get("workspaceId") == "00000000-0000-0000-0000-000000000000":
+                type_props["workspaceId"] = workspace_id
     return content
 
 
@@ -483,8 +752,57 @@ def choose_existing_files(base_dir: str, candidates: List[str]) -> List[str]:
     return found
 
 
-def parse_csv_values(raw_values: str, label: str) -> List[str]:
-    values = [value.strip().lower() for value in raw_values.split(",") if value.strip()]
+def discover_tier_items(tier_dir: str, base_dir: str) -> dict:
+    """Scan a tier folder for Fabric item folders identified by their .platform files.
+
+    Walks ``tier_dir`` recursively and returns all item folders that contain a
+    ``.platform`` file with a recognised ``metadata.type`` (Notebook, Lakehouse,
+    or DataPipeline).
+
+    Args:
+        tier_dir: Absolute or relative path to the tier folder (e.g. ``Bronze/``).
+        base_dir: Root used to compute relative paths in the returned records.
+
+    Returns:
+        A dict with keys ``'notebooks'``, ``'lakehouses'``, ``'data_pipelines'``,
+        each a list of ``{'path': <relative-to-base_dir>, 'display_name': str}``.
+    """
+    discovered: dict = {"notebooks": [], "lakehouses": [], "data_pipelines": []}
+
+    if not os.path.isdir(tier_dir):
+        return discovered
+
+    for root, _dirs, files in os.walk(tier_dir):
+        if ".platform" not in files:
+            continue
+
+        platform_path = os.path.join(root, ".platform")
+        try:
+            with open(platform_path, "r", encoding="utf-8") as fh:
+                platform_data = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        item_type = platform_data.get("metadata", {}).get("type", "")
+        display_name = platform_data.get("metadata", {}).get("displayName") or Path(root).stem
+        logical_id = platform_data.get("config", {}).get("logicalId")
+        rel_path = os.path.relpath(root, base_dir)
+
+        if item_type == "Notebook":
+            discovered["notebooks"].append({"path": rel_path, "display_name": display_name, "logical_id": logical_id})
+        elif item_type == "Lakehouse":
+            discovered["lakehouses"].append({"path": rel_path, "display_name": display_name, "logical_id": logical_id})
+        elif item_type == "DataPipeline":
+            discovered["data_pipelines"].append({"path": rel_path, "display_name": display_name, "logical_id": logical_id})
+
+    return discovered
+
+
+def parse_csv_values(raw_values: str, label: str, lowercase: bool = True) -> List[str]:
+    if lowercase:
+        values = [value.strip().lower() for value in raw_values.split(",") if value.strip()]
+    else:
+        values = [value.strip() for value in raw_values.split(",") if value.strip()]
     if not values:
         raise ValueError(f"At least one {label} value must be provided.")
     return values
@@ -503,18 +821,26 @@ def load_params_file(params_file: str) -> dict:
     return data
 
 
-def resolve_workspace_name(environment: str, prefix: str, workspace_names: dict) -> str:
-    explicit_name = workspace_names.get(environment)
-    if explicit_name:
-        return explicit_name
-    return f"{prefix}-{environment}"
+def resolve_tier_workspace_name(
+    tier: str,
+    environment: str,
+    prefix: str,
+    prod_environment: str,
+    workspace_names: dict,
+) -> str:
+    """Return the workspace display name for a tier + environment combination.
 
-
-def resolve_lakehouse_name(lakehouse_key: str, lakehouse_suffix: str, lakehouse_names: dict) -> str:
-    explicit_name = lakehouse_names.get(lakehouse_key)
-    if explicit_name:
-        return explicit_name
-    return f"{lakehouse_key}_{lakehouse_suffix}"
+    The prod environment gets no suffix: {prefix}_{tier}  (e.g., Road4_Bronze).
+    All other environments get:         {prefix}_{tier}_{environment}  (e.g., Road4_Bronze_Dev).
+    Explicit overrides keyed as '{tier}_{environment}' in workspace_names take precedence.
+    """
+    key = f"{tier}_{environment}"
+    explicit = workspace_names.get(key)
+    if explicit:
+        return explicit
+    if environment.lower() == prod_environment.lower():
+        return f"{prefix}_{tier}"
+    return f"{prefix}_{tier}_{environment}"
 
 
 def write_workspace_ids(output_path: str, payload: dict) -> None:
@@ -526,20 +852,102 @@ def write_workspace_ids(output_path: str, payload: dict) -> None:
         json.dump(payload, handle, indent=2)
 
 
+def build_git_provider_details(args, params: dict, tier: str) -> dict:
+    """Build the gitProviderDetails payload for the Fabric Git connect API.
+
+    The ``directoryName`` is always set to ``/{tier}`` so each workspace is
+    scoped to its own tier folder in the repository.
+    """
+    git_params = params.get("git_connection", {})
+    provider = args.git_provider or git_params.get("git_provider_type", "GitHub")
+    owner = args.git_org or git_params.get("owner_name", "")
+    repo = args.git_repo or git_params.get("repository_name", "")
+    branch = args.git_branch or git_params.get("branch_name", "")
+
+    if not branch:
+        try:
+            result = subprocess.run(
+                ["git", "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            branch = result.stdout.strip()
+        except Exception:  # pylint: disable=broad-except
+            pass
+
+    details: dict = {
+        "gitProviderType": provider,
+        "repositoryName": repo,
+        "branchName": branch,
+        "directoryName": f"/{tier}",
+    }
+
+    if provider == "AzureDevOps":
+        details["organizationName"] = owner
+        details["projectName"] = args.git_project or git_params.get("project_name", "")
+    else:
+        details["ownerName"] = owner
+
+    return details
+
+
+def build_git_credentials(args, params: dict) -> dict:
+    """Build the myGitCredentials payload for the Fabric Git connect API.
+
+    Fabric expects a ``source`` field in ``myGitCredentials``.
+
+    Supported sources:
+    - ``Automatic``            — uses the caller's Entra ID / Azure AD token
+    - ``ConfiguredConnection`` — uses an existing Fabric Git connection by ID
+
+    Notes:
+    - Some tenants do not allow ``Automatic`` for GitHub.
+    - In that case, use ``ConfiguredConnection`` with ``--git-connection-id``
+      (or ``git_connection_id`` in the params file).
+    """
+    git_params = params.get("git_connection", {})
+    cred_type = (
+        getattr(args, "git_credential_type", None)
+        or git_params.get("git_credential_type", "Automatic")
+    )
+
+    if cred_type == "ConfiguredConnection":
+        connection_id = (
+            getattr(args, "git_connection_id", None)
+            or git_params.get("git_connection_id", "")
+        )
+        if not connection_id:
+            raise ValueError(
+                "--git-connection-id (or git_connection_id in git_connection params) "
+                "is required when git_credential_type is ConfiguredConnection."
+            )
+        return {"source": "ConfiguredConnection", "connectionId": connection_id}
+
+    if cred_type == "PersonalAccessToken":
+        raise ValueError(
+            "git_credential_type=PersonalAccessToken is not supported by the Fabric "
+            "git/connect API in this script. Use ConfiguredConnection with a Fabric "
+            "connection ID instead."
+        )
+
+    return {"source": "Automatic"}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Create Fabric environment workspaces with medallion lakehouses + notebooks",
+        description="Deploy medallion Bronze/Silver/Gold tier workspaces to Microsoft Fabric",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
             "  python scripts/deploy_medallion_workspaces.py --interactive\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace dev\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace prod\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace staging\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace feature\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace Dev\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace Prod\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace Staging\n"
             "  python scripts/deploy_medallion_workspaces.py --interactive --workspace all\n"
+            "  python scripts/deploy_medallion_workspaces.py --interactive --workspaces-only\n"
             "  python scripts/deploy_medallion_workspaces.py --token <token> --params-file infra/medallion_workspace_params.json\n"
-            "  python scripts/deploy_medallion_workspaces.py --environments dev,prod,feature,staging --capacity-id <id>"
+            "  python scripts/deploy_medallion_workspaces.py --tiers Bronze,Silver --environments Dev,Prod --capacity-id <id>"
         ),
     )
 
@@ -555,36 +963,38 @@ def main() -> None:
     parser.add_argument(
         "--prefix",
         default=None,
-        help="Workspace naming prefix (default: medallion)",
+        help="Workspace naming prefix (default: Road4)",
+    )
+    parser.add_argument(
+        "--tiers",
+        default=None,
+        help="Comma-separated medallion tiers to deploy (default: Bronze,Silver,Gold)",
     )
     parser.add_argument(
         "--environments",
         default=None,
-        help="Comma-separated workspaces to create (default: dev,prod,feature,staging)",
+        help="Comma-separated environments to deploy per tier (default: Dev,Prod,Staging,Feature)",
     )
     parser.add_argument(
-        "--workspace",
-        choices=["dev", "prod", "staging", "feature", "all"],
-        default="all",
+        "--prod-environment",
+        default=None,
         help=(
-            "Quick workspace selector. Use 'dev' or 'prod' to deploy to one workspace, "
-            "or 'all' to deploy all environments from --environments/params file (default: all)."
+            "Environment name that gets no suffix in workspace names (default: Prod). "
+            "e.g., 'Road4_Bronze' instead of 'Road4_Bronze_Prod'"
         ),
     )
     parser.add_argument(
-        "--medallion-lakehouses",
-        default=None,
-        help="Comma-separated medallion lakehouses to create per workspace (default: raw,bronze,silver,gold)",
-    )
-    parser.add_argument(
-        "--lakehouse-suffix",
-        default=None,
-        help="Suffix for each lakehouse display name (default: lakehouse)",
+        "--workspace",
+        default="all",
+        help=(
+            "Filter deployment to a single environment (e.g., Dev, Prod) across all tiers, "
+            "or 'all' to deploy every environment (default: all)."
+        ),
     )
     parser.add_argument(
         "--notebook-dir",
         default=None,
-        help="Directory containing notebook files (default: Medallion)",
+        help="Base directory containing tier notebook folders (default: current directory)",
     )
     parser.add_argument(
         "--capacity-id",
@@ -615,6 +1025,67 @@ def main() -> None:
         action="store_true",
         help="Skip pipeline deployment when the pipeline already exists",
     )
+    parser.add_argument(
+        "--workspaces-only",
+        action="store_true",
+        help="Only create/verify workspaces and assign capacity. Skip lakehouses, notebooks, and pipelines.",
+    )
+    parser.add_argument(
+        "--git-sync",
+        action="store_true",
+        help=(
+            "Connect each workspace to its tier directory in the Git repo and sync items "
+            "using the Fabric Git Integration API. Items are created with the correct "
+            "logicalId values from .platform files, making subsequent Git syncs conflict-free. "
+            "Skips individual REST API item creation."
+        ),
+    )
+    parser.add_argument(
+        "--git-provider",
+        default=None,
+        choices=["GitHub", "AzureDevOps"],
+        help="Git provider type for --git-sync (default: GitHub)",
+    )
+    parser.add_argument(
+        "--git-org",
+        default=None,
+        help="GitHub owner name or Azure DevOps organisation name for --git-sync",
+    )
+    parser.add_argument(
+        "--git-repo",
+        default=None,
+        help="Repository name for --git-sync",
+    )
+    parser.add_argument(
+        "--git-branch",
+        default=None,
+        help="Branch name for --git-sync (default: current git branch)",
+    )
+    parser.add_argument(
+        "--git-project",
+        default=None,
+        help="Azure DevOps project name (only required when --git-provider AzureDevOps)",
+    )
+    parser.add_argument(
+        "--git-credential-type",
+        default=None,
+        choices=["Automatic", "ConfiguredConnection", "PersonalAccessToken"],
+        help=(
+            "Credential type for the Fabric Git connect API (default: Automatic). "
+            "Use ConfiguredConnection when your Fabric tenant does not allow the "
+            "Automatic flow for GitHub connections."
+        ),
+    )
+    parser.add_argument(
+        "--git-connection-id",
+        default=None,
+        help="Fabric Git connection ID (required when --git-credential-type ConfiguredConnection)",
+    )
+    parser.add_argument(
+        "--git-pat",
+        default=None,
+        help="Deprecated. Use --git-credential-type ConfiguredConnection and --git-connection-id instead.",
+    )
 
     args = parser.parse_args()
 
@@ -632,23 +1103,23 @@ def main() -> None:
         print(f"❌ Invalid parameter file: {error}")
         sys.exit(1)
 
-    prefix = args.prefix if args.prefix is not None else params.get("prefix", "medallion")
+    prefix = args.prefix if args.prefix is not None else params.get("prefix", "Road4")
+    tiers_raw = (
+        args.tiers
+        if args.tiers is not None
+        else params.get("tiers", ",".join(DEFAULT_TIERS))
+    )
     environments_raw = (
         args.environments
         if args.environments is not None
         else params.get("environments", ",".join(DEFAULT_ENVIRONMENTS))
     )
-    medallion_lakehouses_raw = (
-        args.medallion_lakehouses
-        if args.medallion_lakehouses is not None
-        else params.get("medallion_lakehouses", ",".join(DEFAULT_MEDALLION_LAKEHOUSES))
+    prod_environment = (
+        args.prod_environment
+        if args.prod_environment is not None
+        else params.get("prod_environment", DEFAULT_PROD_ENVIRONMENT)
     )
-    lakehouse_suffix = (
-        args.lakehouse_suffix
-        if args.lakehouse_suffix is not None
-        else params.get("lakehouse_suffix", "lakehouse")
-    )
-    notebook_dir = args.notebook_dir if args.notebook_dir is not None else params.get("notebook_dir", "Medallion")
+    notebook_dir = args.notebook_dir if args.notebook_dir is not None else params.get("notebook_dir", ".")
     capacity_id = args.capacity_id if args.capacity_id is not None else params.get("capacity_id")
     workspace_description = (
         args.workspace_description
@@ -656,10 +1127,12 @@ def main() -> None:
         else params.get("workspace_description", "Managed by deploy_medallion_workspaces.py")
     )
     workspace_names = params.get("workspace_names", {})
-    lakehouse_names = params.get("lakehouse_names", {})
-    notebook_candidates = params.get("notebooks", DEFAULT_NOTEBOOKS)
-    pipelines_by_layer = dict(DEFAULT_PIPELINES_BY_LAYER)
-    pipelines_by_layer.update(params.get("pipelines_by_layer", {}))
+    tier_lakehouses = dict(DEFAULT_TIER_LAKEHOUSES)
+    tier_lakehouses.update({k.lower(): v for k, v in params.get("tier_lakehouses", {}).items()})
+    tier_notebooks = dict(DEFAULT_TIER_NOTEBOOKS)
+    tier_notebooks.update({k.lower(): v for k, v in params.get("tier_notebooks", {}).items()})
+    tier_pipelines = dict(DEFAULT_TIER_PIPELINES)
+    tier_pipelines.update({k.lower(): v for k, v in params.get("tier_pipelines", {}).items()})
     workspace_ids_output = (
         args.workspace_ids_output
         if args.workspace_ids_output is not None
@@ -667,30 +1140,32 @@ def main() -> None:
     )
 
     try:
-        environments = parse_csv_values(environments_raw, "environment")
-        medallion_lakehouses = parse_csv_values(medallion_lakehouses_raw, "medallion lakehouse")
+        tiers = parse_csv_values(tiers_raw, "tier", lowercase=False)
+        environments = parse_csv_values(environments_raw, "environment", lowercase=False)
     except ValueError as error:
         print(f"❌ {error}")
         sys.exit(1)
 
     if args.workspace != "all":
-        if args.workspace not in environments:
+        matched = [e for e in environments if e.lower() == args.workspace.lower()]
+        if not matched:
             print(
-                f"⚠️ Workspace '{args.workspace}' was selected but is not present in environments: "
-                f"{', '.join(environments)}"
+                f"⚠️ Environment '{args.workspace}' not found in: {', '.join(environments)}"
             )
-            print("   Proceeding with selected workspace only.")
-        environments = [args.workspace]
+            print("   Proceeding with selected environment only.")
+        environments = matched if matched else [args.workspace]
 
-    if not os.path.isdir(notebook_dir):
+    if not args.workspaces_only and not os.path.isdir(notebook_dir):
         print(f"❌ Notebook directory not found: {notebook_dir}")
         sys.exit(1)
 
     client = FabricClient(access_token)
 
+    prod_label = f"('{prod_environment}' environment \u2192 no env suffix, e.g., {prefix}_Bronze)"
     print("🚀 Starting medallion deployment...")
-    print(f"   Workspaces: {', '.join(environments)}")
-    print(f"   Lakehouses per workspace: {', '.join(medallion_lakehouses)}")
+    print(f"   Tiers: {', '.join(tiers)}")
+    print(f"   Environments: {', '.join(environments)}")
+    print(f"   Prod environment: {prod_label}")
     print(f"   Notebook dir: {notebook_dir}")
     print(f"   Params file: {args.params_file}")
     print(f"   Workspace IDs output: {workspace_ids_output}")
@@ -709,98 +1184,250 @@ def main() -> None:
     }
     workspace_id_records = []
 
-    for environment in environments:
-        workspace_name = resolve_workspace_name(environment, prefix, workspace_names)
+    for tier in tiers:
+        tier_key = tier.lower()
+        tier_notebook_list = tier_notebooks.get(tier_key, [])
+        tier_pipeline_list = tier_pipelines.get(tier_key, [])
+        tier_lakehouse_name = tier_lakehouses.get(tier_key, f"{tier_key}_lakehouse")
 
-        print("\n" + "=" * 72)
-        print(f"📦 Workspace: {environment}")
-        print("=" * 72)
+        # Auto-discover all Fabric items (Notebooks, Lakehouses, DataPipelines) in the tier folder
+        tier_folder = os.path.join(notebook_dir, tier)
+        discovered = discover_tier_items(tier_folder, notebook_dir)
+        if discovered["notebooks"] or discovered["lakehouses"] or discovered["data_pipelines"]:
+            print(
+                f"\n🔍 Discovered in {tier}/: "
+                f"{len(discovered['notebooks'])} notebook(s), "
+                f"{len(discovered['lakehouses'])} lakehouse(s), "
+                f"{len(discovered['data_pipelines'])} DataPipeline(s)"
+            )
 
-        print(f"🧭 Ensuring workspace '{workspace_name}'...")
-        workspace = client.get_or_create_workspace(
-            workspace_name,
-            description=workspace_description,
-            capacity_id=capacity_id,
-        )
-        workspace_id = workspace["id"]
-        summary["workspaces_created_or_found"] += 1
-        print(f"   ✅ Workspace ready: {workspace_name} ({workspace_id})")
+        for environment in environments:
+            workspace_name = resolve_tier_workspace_name(
+                tier, environment, prefix, prod_environment, workspace_names
+            )
 
-        if capacity_id:
-            print(f"🧲 Assigning workspace to capacity '{capacity_id}'...")
-            try:
-                assignment = client.assign_workspace_to_capacity(workspace_id, capacity_id)
-                summary["capacity_assignments_succeeded"] += 1
-                print(
-                    "   ✅ Capacity assignment complete "
-                    f"(HTTP {assignment['statusCode']}, {assignment['endpoint']})"
-                )
-            except Exception as error:  # pylint: disable=broad-except
-                summary["capacity_assignments_failed"] += 1
-                print(f"   ❌ Capacity assignment failed: {error}")
+            print("\n" + "=" * 72)
+            print(f"📦 {tier} / {environment}  →  {workspace_name}")
+            print("=" * 72)
 
-        # ── Deploy notebooks first so IDs are available for pipeline resolution ──
-        notebook_id_map: Dict[str, str] = {}
-        notebook_files = choose_existing_notebooks(notebook_dir, notebook_candidates)
+            print(f"🧭 Ensuring workspace '{workspace_name}'...")
+            workspace = client.get_or_create_workspace(
+                workspace_name,
+                description=workspace_description,
+                capacity_id=capacity_id,
+            )
+            workspace_id = workspace["id"]
+            summary["workspaces_created_or_found"] += 1
+            print(f"   ✅ Workspace ready: {workspace_name} ({workspace_id})")
 
-        if not notebook_files:
-            print("   ⚠️ No notebooks found for deployment, skipping notebook deployment")
-        else:
-            print("\n📓 Deploying notebooks...")
-            for notebook_file in notebook_files:
-                notebook_path = os.path.join(notebook_dir, notebook_file)
-                display_name = notebook_display_name(notebook_file)
+            if capacity_id:
+                print(f"🧲 Assigning workspace to capacity '{capacity_id}'...")
+                try:
+                    assignment = client.assign_workspace_to_capacity(workspace_id, capacity_id)
+                    summary["capacity_assignments_succeeded"] += 1
+                    print(
+                        "   ✅ Capacity assignment complete "
+                        f"(HTTP {assignment['statusCode']}, {assignment['endpoint']})"
+                    )
+                except Exception as error:  # pylint: disable=broad-except
+                    summary["capacity_assignments_failed"] += 1
+                    print(f"   ❌ Capacity assignment failed: {error}")
 
-                if args.skip_existing_notebooks and client.notebook_exists(workspace_id, display_name):
-                    print(f"   ⏭️ Notebook already exists, skipped: {display_name}")
-                    summary["notebooks_skipped"] += 1
-                    nb_id = client.get_notebook_id(workspace_id, display_name)
-                    if nb_id:
-                        notebook_id_map[display_name] = nb_id
+            if args.workspaces_only:
+                continue
+
+            # ── Git Integration sync path ─────────────────────────────────────────
+            if args.git_sync:
+                git_details = build_git_provider_details(args, params, tier)
+                missing = [k for k in ("repositoryName", "branchName", "ownerName")
+                           if not git_details.get(k) and k != "ownerName" or
+                           (k == "ownerName" and git_details.get("gitProviderType") == "GitHub" and not git_details.get(k))]
+                if git_details.get("gitProviderType") == "AzureDevOps":
+                    missing = [k for k in ("repositoryName", "branchName", "organizationName", "projectName")
+                               if not git_details.get(k)]
+                if missing:
+                    print(f"   ❌ Git sync skipped — missing: {', '.join(missing)}. "
+                          f"Set via --git-org / --git-repo / --git-branch or git_connection in params file.")
+                    workspace_id_records.append({
+                        "tier": tier, "environment": environment,
+                        "workspaceName": workspace_name, "workspaceId": workspace_id,
+                        "lakehouses": [], "pipelines": [],
+                    })
                     continue
 
-                print(f"   📝 Deploying notebook: {display_name}")
+                print(f"\n🔗 Git sync: {git_details['gitProviderType']} "
+                      f"{git_details.get('ownerName') or git_details.get('organizationName')}/"
+                      f"{git_details['repositoryName']} "
+                      f"@ {git_details['branchName']}{git_details['directoryName']}")
                 try:
-                    content = load_notebook_content(notebook_path)
-                    response = client.create_notebook(workspace_id, display_name, content)
-                    if response.get("status") == "exists":
+                    git_credentials = build_git_credentials(args, params)
+                    existing_connection = client.get_git_connection(workspace_id)
+                    if existing_connection:
+                        print("   🔄 Already connected — updating from Git...")
+                        result = client.update_from_git(workspace_id)
+                    else:
+                        cred_label = git_credentials["source"]
+                        print(f"   🔌 Connecting workspace to Git repo (credentials: {cred_label})...")
+                        client.connect_git(workspace_id, git_details, git_credentials)
+                        print("   🚀 Initialising connection (PreferRemote — Git wins on conflict)...")
+                        result = client.initialize_git_connection(workspace_id, strategy="PreferRemote")
+
+                    if result.get("status") == "pending" and result.get("operationId"):
+                        print("   ⏳ Waiting for Git sync to complete...")
+                        op = client.poll_long_running_operation(result["operationId"])
+                        if op.get("status", "").lower() == "failed":
+                            err_msg = op.get("error", {}).get("message", "unknown error")
+                            print(f"   ❌ Git sync failed: {err_msg}")
+                        else:
+                            print("   ✅ Git sync complete")
+                    else:
+                        print("   ✅ Git sync complete")
+
+                except Exception as error:  # pylint: disable=broad-except
+                    print(f"   ❌ Git sync error: {error}")
+                    error_text = str(error)
+                    if "GitCredentialsConfigurationNotSupported" in error_text:
+                        print(
+                            "   💡 This tenant does not support myGitCredentials.source=Automatic for this provider."
+                        )
+                        print(
+                            "      Use --git-credential-type ConfiguredConnection and "
+                            "--git-connection-id <fabric-connection-id>."
+                        )
+
+                # Collect item IDs from the synced workspace for workspace_ids.json
+                workspace_lakehouses = [
+                    {"name": lh.get("displayName"), "id": lh.get("id"), "medallionLayer": tier_key}
+                    for lh in client.list_lakehouses(workspace_id)
+                ]
+                workspace_pipelines = [
+                    {"name": pl.get("displayName"), "id": pl.get("id"), "medallionLayer": tier_key}
+                    for pl in client.list_pipelines(workspace_id)
+                ]
+                workspace_id_records.append({
+                    "tier": tier,
+                    "environment": environment,
+                    "workspaceName": workspace_name,
+                    "workspaceId": workspace_id,
+                    "lakehouses": workspace_lakehouses,
+                    "pipelines": workspace_pipelines,
+                })
+                continue  # skip REST API item deployment
+
+            # ── REST API item deployment path ────────────────────────────────────
+
+            # ── Deploy this tier's notebooks first so IDs are available for pipeline resolution ──
+            notebook_id_map: Dict[str, str] = {}
+
+            # Build notebook list: discovered .Notebook folders first, then explicit params (no duplicates)
+            seen_nb_paths: set = set()
+            all_notebook_items: List[dict] = []
+            for item in discovered["notebooks"]:
+                all_notebook_items.append(item)
+                seen_nb_paths.add(item["path"])
+            for rel_path in choose_existing_notebooks(notebook_dir, tier_notebook_list):
+                if rel_path not in seen_nb_paths:
+                    all_notebook_items.append(
+                        {"path": rel_path, "display_name": notebook_display_name(rel_path)}
+                    )
+                    seen_nb_paths.add(rel_path)
+
+            if not all_notebook_items:
+                print(f"   ⚠️ No notebooks found for {tier}, skipping notebook deployment")
+            else:
+                print(f"\n📓 Deploying {tier} notebooks ({len(all_notebook_items)} found)...")
+                for nb_item in all_notebook_items:
+                    notebook_path = os.path.join(notebook_dir, nb_item["path"])
+                    display_name = nb_item["display_name"]
+
+                    if args.skip_existing_notebooks and client.notebook_exists(workspace_id, display_name):
+                        print(f"   ⏭️ Notebook already exists, skipped: {display_name}")
                         summary["notebooks_skipped"] += 1
-                        print("      ⏭️ Already exists, skipped")
                         nb_id = client.get_notebook_id(workspace_id, display_name)
                         if nb_id:
                             notebook_id_map[display_name] = nb_id
-                    else:
-                        summary["notebooks_deployed"] += 1
-                        print("      ✅ Deployed")
-                        if response.get("id"):
-                            notebook_id_map[display_name] = response["id"]
-                except Exception as error:  # pylint: disable=broad-except
-                    summary["notebooks_failed"] += 1
-                    print(f"      ❌ Failed: {error}")
+                            if nb_item.get("logical_id"):
+                                notebook_id_map[nb_item["logical_id"]] = nb_id
+                        continue
 
-        workspace_lakehouses = []
-        workspace_pipelines = []
-        for lakehouse_key in medallion_lakehouses:
-            lakehouse_name = resolve_lakehouse_name(lakehouse_key, lakehouse_suffix, lakehouse_names)
-            print(f"🏠 Ensuring lakehouse '{lakehouse_name}'...")
-            lakehouse = client.get_or_create_lakehouse(workspace_id, lakehouse_name)
-            summary["lakehouses_created_or_found"] += 1
-            print(f"   ✅ Lakehouse ready: {lakehouse.get('displayName')} ({lakehouse.get('id')})")
-            workspace_lakehouses.append(
-                {
-                    "name": lakehouse.get("displayName"),
-                    "id": lakehouse.get("id"),
-                    "medallionLayer": lakehouse_key,
-                }
+                    print(f"   📝 Deploying notebook: {display_name}")
+                    try:
+                        content = load_notebook_content(notebook_path)
+                        existing_notebook_id = client.get_notebook_id(workspace_id, display_name)
+                        if existing_notebook_id:
+                            print("      ♻️ Existing notebook found, updating definition")
+                            response = client.update_notebook(workspace_id, existing_notebook_id, content)
+                            summary["notebooks_deployed"] += 1
+                            notebook_id_map[display_name] = existing_notebook_id
+                            if nb_item.get("logical_id"):
+                                notebook_id_map[nb_item["logical_id"]] = existing_notebook_id
+                            if response.get("status") == "pending":
+                                print("      ✅ Update requested (async)")
+                            else:
+                                print("      ✅ Updated")
+                        else:
+                            response = retry_create_after_delete(
+                                lambda: client.create_notebook(workspace_id, display_name, content),
+                                display_name,
+                                "notebook",
+                            )
+                            if response.get("status") == "exists":
+                                summary["notebooks_skipped"] += 1
+                                print("      ⏭️ Already exists, skipped")
+                                nb_id = client.get_notebook_id(workspace_id, display_name)
+                                if nb_id:
+                                    notebook_id_map[display_name] = nb_id
+                                    if nb_item.get("logical_id"):
+                                        notebook_id_map[nb_item["logical_id"]] = nb_id
+                                continue
+                            summary["notebooks_deployed"] += 1
+                            print("      ✅ Deployed")
+                            if response.get("id"):
+                                notebook_id_map[display_name] = response["id"]
+                                if nb_item.get("logical_id"):
+                                    notebook_id_map[nb_item["logical_id"]] = response["id"]
+                    except Exception as error:  # pylint: disable=broad-except
+                        summary["notebooks_failed"] += 1
+                        print(f"      ❌ Failed: {error}")
+
+            # ── Deploy this tier's lakehouses ──
+            workspace_lakehouses = []
+            workspace_pipelines = []
+
+            # Prefer lakehouses discovered from the tier folder; fall back to params default
+            lakehouses_to_deploy = (
+                [item["display_name"] for item in discovered["lakehouses"]]
+                if discovered["lakehouses"]
+                else [tier_lakehouse_name]
             )
 
-            pipeline_candidates = pipelines_by_layer.get(lakehouse_key, [])
-            pipeline_files = choose_existing_files(notebook_dir, pipeline_candidates)
+            for lh_name in lakehouses_to_deploy:
+                print(f"🏠 Ensuring lakehouse '{lh_name}'...")
+                lakehouse = client.get_or_create_lakehouse(workspace_id, lh_name)
+                summary["lakehouses_created_or_found"] += 1
+                print(f"   ✅ Lakehouse ready: {lakehouse.get('displayName')} ({lakehouse.get('id')})")
+                workspace_lakehouses.append(
+                    {
+                        "name": lakehouse.get("displayName"),
+                        "id": lakehouse.get("id"),
+                        "medallionLayer": tier_key,
+                    }
+                )
+
+            # ── Deploy this tier's pipelines (JSON fallback — skipped if a .DataPipeline folder covers the same name) ──
+            # Names already covered by discovered .DataPipeline folders take precedence.
+            discovered_dp_names = {item["display_name"] for item in discovered["data_pipelines"]}
+            pipeline_files = choose_existing_files(notebook_dir, tier_pipeline_list)
 
             for pipeline_file in pipeline_files:
                 pipeline_path = os.path.join(notebook_dir, pipeline_file)
                 pipeline_content = load_json_content(pipeline_path)
                 display_name = pipeline_display_name(pipeline_file, pipeline_content)
+
+                if display_name in discovered_dp_names:
+                    print(f"   ⏭️ JSON pipeline '{display_name}' superseded by discovered .DataPipeline folder, skipping")
+                    continue
+
                 pipeline_content = resolve_notebook_references(
                     pipeline_content, workspace_id, notebook_id_map, client
                 )
@@ -812,12 +1439,20 @@ def main() -> None:
 
                 print(f"🧩 Deploying pipeline: {display_name}")
                 try:
-                    response = client.create_pipeline(workspace_id, display_name, pipeline_content)
+                    existing_pipeline_id = client.get_pipeline_id(workspace_id, display_name)
+                    if existing_pipeline_id:
+                        print("   ♻️ Existing pipeline found, replacing")
+                        client.delete_pipeline(workspace_id, existing_pipeline_id)
+                    response = retry_create_after_delete(
+                        lambda: client.create_pipeline(workspace_id, display_name, pipeline_content),
+                        display_name,
+                        "pipeline",
+                    )
                     workspace_pipelines.append(
                         {
                             "name": display_name,
                             "id": response.get("id", display_name),
-                            "medallionLayer": lakehouse_key,
+                            "medallionLayer": tier_key,
                             "sourcePath": pipeline_file,
                         }
                     )
@@ -842,7 +1477,7 @@ def main() -> None:
                             {
                                 "name": display_name,
                                 "id": shell_response.get("id", display_name),
-                                "medallionLayer": lakehouse_key,
+                                "medallionLayer": tier_key,
                                 "sourcePath": pipeline_file,
                             }
                         )
@@ -856,15 +1491,91 @@ def main() -> None:
                         summary["pipelines_failed"] += 1
                         print(f"   ❌ Pipeline deployment failed: {shell_error}")
 
-        workspace_id_records.append(
-            {
-                "environment": environment,
-                "workspaceName": workspace_name,
-                "workspaceId": workspace_id,
-                "lakehouses": workspace_lakehouses,
-                "pipelines": workspace_pipelines,
-            }
-        )
+            # ── Deploy discovered .DataPipeline folders ──
+            if discovered["data_pipelines"]:
+                print(f"\n🔗 Deploying {tier} DataPipeline folders ({len(discovered['data_pipelines'])} found)...")
+            for dp_item in discovered["data_pipelines"]:
+                dp_folder = os.path.join(notebook_dir, dp_item["path"])
+                dp_content_file = os.path.join(dp_folder, "pipeline-content.json")
+                display_name = dp_item["display_name"]
+
+                if not os.path.exists(dp_content_file):
+                    print(f"   ⚠️ Missing pipeline-content.json in {dp_item['path']}, skipping")
+                    continue
+
+                if args.skip_existing_pipelines and client.pipeline_exists(workspace_id, display_name):
+                    print(f"   ⏭️ DataPipeline already exists, skipped: {display_name}")
+                    summary["pipelines_skipped"] += 1
+                    continue
+
+                print(f"   🧩 Deploying DataPipeline: {display_name}")
+                try:
+                    pipeline_content = load_json_content(dp_content_file)
+                    pipeline_content = resolve_notebook_references(
+                        pipeline_content, workspace_id, notebook_id_map, client
+                    )
+                    existing_pipeline_id = client.get_pipeline_id(workspace_id, display_name)
+                    if existing_pipeline_id:
+                        print("      ♻️ Existing DataPipeline found, replacing")
+                        client.delete_pipeline(workspace_id, existing_pipeline_id)
+                    response = retry_create_after_delete(
+                        lambda: client.create_pipeline(workspace_id, display_name, pipeline_content),
+                        display_name,
+                        "DataPipeline",
+                    )
+                    workspace_pipelines.append(
+                        {
+                            "name": display_name,
+                            "id": response.get("id", display_name),
+                            "medallionLayer": tier_key,
+                            "sourcePath": dp_item["path"],
+                        }
+                    )
+                    if response.get("status") == "exists":
+                        summary["pipelines_skipped"] += 1
+                        print("      ⏭️ DataPipeline already exists, skipped")
+                    else:
+                        summary["pipelines_deployed"] += 1
+                        print("      ✅ DataPipeline deployed")
+                except Exception as error:  # pylint: disable=broad-except
+                    print(f"      ⚠️ DataPipeline definition rejected, creating empty shell instead: {error}")
+                    try:
+                        shell_response = client.create_pipeline_shell(
+                            workspace_id,
+                            display_name,
+                            description=(
+                                "Created by deploy_medallion_workspaces.py. "
+                                "Source DataPipeline could not be applied automatically."
+                            ),
+                        )
+                        workspace_pipelines.append(
+                            {
+                                "name": display_name,
+                                "id": shell_response.get("id", display_name),
+                                "medallionLayer": tier_key,
+                                "sourcePath": dp_item["path"],
+                            }
+                        )
+                        if shell_response.get("status") == "exists":
+                            summary["pipelines_skipped"] += 1
+                            print("      ⏭️ DataPipeline already exists, skipped")
+                        else:
+                            summary["pipelines_deployed"] += 1
+                            print("      ✅ Empty DataPipeline shell created")
+                    except Exception as shell_error:  # pylint: disable=broad-except
+                        summary["pipelines_failed"] += 1
+                        print(f"      ❌ DataPipeline deployment failed: {shell_error}")
+
+            workspace_id_records.append(
+                {
+                    "tier": tier,
+                    "environment": environment,
+                    "workspaceName": workspace_name,
+                    "workspaceId": workspace_id,
+                    "lakehouses": workspace_lakehouses,
+                    "pipelines": workspace_pipelines,
+                }
+            )
 
     workspace_ids_payload = {
         "generatedAtUtc": datetime.now(timezone.utc).isoformat(),
