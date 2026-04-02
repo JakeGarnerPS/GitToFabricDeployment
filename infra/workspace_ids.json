@@ -7,7 +7,7 @@
       "tier": "Bronze",
       "environment": "Dev",
       "workspaceName": "Road4_Bronze_Dev",
-      "workspaceId": "763c0410-1ec8-4b37-8d60-db540fe2958a",
+      "workspaceId": "",
       "lakehouses": [],
       "pipelines": []
     },
@@ -15,7 +15,7 @@
       "tier": "Silver",
       "environment": "Dev",
       "workspaceName": "Road4_Silver_Dev",
-      "workspaceId": "8a32014f-b366-4218-b0a2-059a90372ad5",
+      "workspaceId": "",
       "lakehouses": [],
       "pipelines": []
     },
@@ -23,7 +23,7 @@
       "tier": "Gold",
       "environment": "Dev",
       "workspaceName": "Road4_Gold_Dev",
-      "workspaceId": "26b0b80c-3ab9-4693-bb8b-14198ffc3b43",
+      "workspaceId": "",
       "lakehouses": [],
       "pipelines": []
     }
