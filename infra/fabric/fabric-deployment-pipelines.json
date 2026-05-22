@@ -1,0 +1,85 @@
+{
+  "pipelines": [
+    {
+      "displayName": "Bronze Deployment Pipeline",
+      "description": "Promotes Bronze tier workspaces from Dev to Staging to Prod",
+      "stages": [
+        {
+          "displayName": "Bronze Development",
+          "order": 0,
+          "workspaceId": "e7f00e2c-461b-40fc-b10d-8fb77bcc7204",
+          "description": "Road4_Bronze_Dev",
+          "isPublic": false
+        },
+        {
+          "displayName": "Bronze Staging",
+          "order": 1,
+          "workspaceId": "c72ed4a4-42a8-4a02-9e47-e377f15a4b79",
+          "description": "Road4_Bronze_Staging",
+          "isPublic": false
+        },
+        {
+          "displayName": "Bronze Production",
+          "order": 2,
+          "workspaceId": "985fd0bd-2cfa-44ca-ac3d-163362c24fb3",
+          "description": "Road4_Bronze",
+          "isPublic": true
+        }
+      ]
+    },
+    {
+      "displayName": "Silver Deployment Pipeline",
+      "description": "Promotes Silver tier workspaces from Dev to Staging to Prod",
+      "stages": [
+        {
+          "displayName": "Silver Development",
+          "order": 0,
+          "workspaceId": "510ae7e1-49ca-4141-8b6c-6541468162f0",
+          "description": "Road4_Silver_Dev",
+          "isPublic": false
+        },
+        {
+          "displayName": "Silver Staging",
+          "order": 1,
+          "workspaceId": "253aedb0-2fc4-457a-8d07-6ad441f1a539",
+          "description": "Road4_Silver_Staging",
+          "isPublic": false
+        },
+        {
+          "displayName": "Silver Production",
+          "order": 2,
+          "workspaceId": "54947779-dd2c-4d09-80bd-9ddeb3d42161",
+          "description": "Road4_Silver",
+          "isPublic": true
+        }
+      ]
+    },
+    {
+      "displayName": "Gold Deployment Pipeline",
+      "description": "Promotes Gold tier workspaces from Dev to Staging to Prod",
+      "stages": [
+        {
+          "displayName": "Gold Development",
+          "order": 0,
+          "workspaceId": "8764ec5f-a42e-494c-b0a8-8ec145da9e68",
+          "description": "Road4_Gold_Dev",
+          "isPublic": false
+        },
+        {
+          "displayName": "Gold Staging",
+          "order": 1,
+          "workspaceId": "3e395c6b-c607-46c7-9d62-f66b773b31f3",
+          "description": "Road4_Gold_Staging",
+          "isPublic": false
+        },
+        {
+          "displayName": "Gold Production",
+          "order": 2,
+          "workspaceId": "5eb00d08-f3cd-416a-8db6-4caff4249e2d",
+          "description": "Road4_Gold",
+          "isPublic": true
+        }
+      ]
+    }
+  ]
+}

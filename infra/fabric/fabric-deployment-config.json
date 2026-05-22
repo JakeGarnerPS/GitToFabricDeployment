@@ -1,0 +1,226 @@
+{
+  "apiVersion": "2025-01-01",
+  "deploymentId": "medallion-deployment-1",
+  "name": "Medallion Workspace Deployment",
+  "description": "Deployment configuration for medallion architecture (Bronze, Silver, Gold) across Dev, Staging, and Prod",
+  "stages": {
+    "dev": {
+      "name": "Development",
+      "workspaces": {
+        "bronze": {
+          "name": "Road4_Bronze_Dev",
+          "description": "Bronze tier - Development environment",
+          "tier": "Bronze",
+          "environment": "Dev",
+          "capacityId": "${CAPACITY_ID}",
+          "region": "East US",
+          "items": {
+            "lakehouses": [
+              {
+                "name": "raw_lakehouse",
+                "description": "Raw data landing area"
+              },
+              {
+                "name": "bronze_lakehouse",
+                "description": "Bronze processed data"
+              }
+            ],
+            "notebooks": [
+              {
+                "name": "01_ingest_raw_sales",
+                "type": "Notebook",
+                "path": "Bronze/Notebooks/01_ingest_raw_sales.Notebook"
+              },
+              {
+                "name": "01_ingest_raw_sales_python",
+                "type": "Notebook",
+                "path": "Bronze/Notebooks/01_ingest_raw_sales_python.Notebook"
+              }
+            ],
+            "pipelines": [
+              {
+                "name": "bronze_ingestion_pipeline",
+                "type": "DataPipeline",
+                "path": "Bronze/DataPipelines/bronze_ingestion_pipeline.DataPipeline"
+              }
+            ]
+          }
+        },
+        "silver": {
+          "name": "Road4_Silver_Dev",
+          "description": "Silver tier - Development environment",
+          "tier": "Silver",
+          "environment": "Dev",
+          "capacityId": "${CAPACITY_ID}",
+          "region": "East US",
+          "items": {
+            "lakehouses": [
+              {
+                "name": "silver_lakehouse",
+                "description": "Cleaned and standardized data"
+              }
+            ],
+            "notebooks": [
+              {
+                "name": "02_clean_sales_data",
+                "type": "Notebook",
+                "path": "Silver/Notebooks/02_clean_sales_data.Notebook"
+              }
+            ],
+            "pipelines": [
+              {
+                "name": "silver_transform_pipeline",
+                "type": "DataPipeline",
+                "path": "Silver/DataPipelines/silver_transform_pipeline.DataPipeline"
+              }
+            ]
+          }
+        },
+        "gold": {
+          "name": "Road4_Gold_Dev",
+          "description": "Gold tier - Development environment",
+          "tier": "Gold",
+          "environment": "Dev",
+          "capacityId": "${CAPACITY_ID}",
+          "region": "East US",
+          "items": {
+            "lakehouses": [
+              {
+                "name": "gold_lakehouse",
+                "description": "Business-ready curated data"
+              }
+            ],
+            "notebooks": [
+              {
+                "name": "03_curate_sales_mart",
+                "type": "Notebook",
+                "path": "Gold/Notebooks/03_curate_sales_mart.Notebook"
+              }
+            ],
+            "pipelines": [
+              {
+                "name": "gold_curated_pipeline",
+                "type": "DataPipeline",
+                "path": "Gold/DataPipelines/gold_curated_pipeline.DataPipeline"
+              }
+            ]
+          }
+        }
+      },
+      "validationRules": [
+        "syntax",
+        "references",
+        "permissions"
+      ]
+    },
+    "staging": {
+      "name": "Staging",
+      "workspaces": {
+        "bronze": {
+          "name": "Road4_Bronze_Staging",
+          "description": "Bronze tier - Staging environment",
+          "tier": "Bronze",
+          "environment": "Staging",
+          "capacityId": "${CAPACITY_ID}",
+          "region": "East US"
+        },
+        "silver": {
+          "name": "Road4_Silver_Staging",
+          "description": "Silver tier - Staging environment",
+          "tier": "Silver",
+          "environment": "Staging",
+          "capacityId": "${CAPACITY_ID}",
+          "region": "East US"
+        },
+        "gold": {
+          "name": "Road4_Gold_Staging",
+          "description": "Gold tier - Staging environment",
+          "tier": "Gold",
+          "environment": "Staging",
+          "capacityId": "${CAPACITY_ID}",
+          "region": "East US"
+        }
+      },
+      "approvalRequired": true,
+      "approvers": [
+        "data-team@company.com"
+      ]
+    },
+    "prod": {
+      "name": "Production",
+      "workspaces": {
+        "bronze": {
+          "name": "Road4_Bronze",
+          "description": "Bronze tier - Production environment",
+          "tier": "Bronze",
+          "environment": "Prod",
+          "capacityId": "${CAPACITY_ID}",
+          "region": "East US"
+        },
+        "silver": {
+          "name": "Road4_Silver",
+          "description": "Silver tier - Production environment",
+          "tier": "Silver",
+          "environment": "Prod",
+          "capacityId": "${CAPACITY_ID}",
+          "region": "East US"
+        },
+        "gold": {
+          "name": "Road4_Gold",
+          "description": "Gold tier - Production environment",
+          "tier": "Gold",
+          "environment": "Prod",
+          "capacityId": "${CAPACITY_ID}",
+          "region": "East US"
+        }
+      },
+      "approvalRequired": true,
+      "requiresAllApprovals": true,
+      "approvers": [
+        "data-lead@company.com",
+        "platform-lead@company.com"
+      ],
+      "autoRollback": true,
+      "rollbackOnFailure": true
+    }
+  },
+  "deploymentOptions": {
+    "updateWorkspaceItems": true,
+    "replaceItems": true,
+    "createWorkspaceIfNotExists": true,
+    "updateConfiguration": true,
+    "validateBeforeDeploy": true,
+    "validateDataSources": true,
+    "generateReport": true,
+    "backupBeforeDeploy": false
+  },
+  "notifications": {
+    "enabled": true,
+    "channels": [
+      "email",
+      "teams"
+    ],
+    "notifyOnStart": true,
+    "notifyOnCompletion": true,
+    "notifyOnFailure": true,
+    "recipients": [
+      "data-team@company.com",
+      "devops@company.com"
+    ]
+  },
+  "rollbackPolicy": {
+    "enabled": true,
+    "autoRollbackOnFailure": true,
+    "retentionDays": 30,
+    "maxRollbacks": 10
+  },
+  "schedule": {
+    "deploymentType": "manual",
+    "timezone": "Eastern Standard Time",
+    "maintenanceWindow": {
+      "day": "Sunday",
+      "startTime": "02:00:00",
+      "endTime": "04:00:00"
+    }
+  }
+}

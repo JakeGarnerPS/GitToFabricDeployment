@@ -1,0 +1,239 @@
+{
+  "name": "Medallion_Deployment_Pipeline",
+  "description": "Deployment pipeline for medallion architecture workspace promotion (Bronze, Silver, Gold)",
+  "type": "DeploymentPipeline",
+  "properties": {
+    "stages": [
+      {
+        "id": "stage-dev",
+        "name": "Development",
+        "order": 1,
+        "displayName": "Dev",
+        "description": "Development environment for testing and experimentation"
+      },
+      {
+        "id": "stage-staging",
+        "name": "Staging",
+        "order": 2,
+        "displayName": "Staging",
+        "description": "Staging environment for pre-production validation"
+      },
+      {
+        "id": "stage-prod",
+        "name": "Production",
+        "order": 3,
+        "displayName": "Prod",
+        "description": "Production environment for live data"
+      }
+    ],
+    "policies": {
+      "itemValidation": {
+        "enabled": true,
+        "requiresApproval": false,
+        "rules": [
+          {
+            "itemType": "Notebook",
+            "validationRules": [
+              "syntaxCheck",
+              "parameterValidation"
+            ]
+          },
+          {
+            "itemType": "DataPipeline",
+            "validationRules": [
+              "syntaxCheck",
+              "dependencyCheck"
+            ]
+          },
+          {
+            "itemType": "Lakehouse",
+            "validationRules": [
+              "metadataValidation"
+            ]
+          }
+        ]
+      },
+      "promotion": {
+        "requiresApproval": true,
+        "autoPublish": false,
+        "preserveOwnership": true,
+        "stageApprovals": {
+          "Dev": {
+            "required": false,
+            "approvers": []
+          },
+          "Staging": {
+            "required": true,
+            "approvers": [
+              "data-team@company.com",
+              "devops@company.com"
+            ]
+          },
+          "Prod": {
+            "required": true,
+            "approvers": [
+              "data-lead@company.com",
+              "platform-lead@company.com"
+            ],
+            "requiresAllApprovals": true,
+            "autoRollback": true
+          }
+        }
+      },
+      "notifications": {
+        "enabled": true,
+        "stages": ["Prod"],
+        "notifyOnFailure": true,
+        "notifyOnSuccess": true,
+        "recipients": [
+          "data-team@company.com",
+          "devops@company.com"
+        ]
+      }
+    },
+    "workspaces": {
+      "Bronze": {
+        "Dev": {
+          "workspaceName": "Road4_Bronze_Dev",
+          "workspaceId": "${BRONZE_DEV_WORKSPACE_ID}",
+          "items": [
+            "raw_lakehouse",
+            "bronze_lakehouse",
+            "01_ingest_raw_sales",
+            "01_ingest_raw_sales_python",
+            "bronze_ingestion_pipeline"
+          ]
+        },
+        "Staging": {
+          "workspaceName": "Road4_Bronze_Staging",
+          "workspaceId": "${BRONZE_STAGING_WORKSPACE_ID}",
+          "items": [
+            "raw_lakehouse",
+            "bronze_lakehouse",
+            "01_ingest_raw_sales",
+            "01_ingest_raw_sales_python",
+            "bronze_ingestion_pipeline"
+          ]
+        },
+        "Prod": {
+          "workspaceName": "Road4_Bronze",
+          "workspaceId": "${BRONZE_PROD_WORKSPACE_ID}",
+          "items": [
+            "raw_lakehouse",
+            "bronze_lakehouse",
+            "01_ingest_raw_sales",
+            "01_ingest_raw_sales_python",
+            "bronze_ingestion_pipeline"
+          ]
+        }
+      },
+      "Silver": {
+        "Dev": {
+          "workspaceName": "Road4_Silver_Dev",
+          "workspaceId": "${SILVER_DEV_WORKSPACE_ID}",
+          "items": [
+            "silver_lakehouse",
+            "02_clean_sales_data",
+            "silver_transform_pipeline"
+          ]
+        },
+        "Staging": {
+          "workspaceName": "Road4_Silver_Staging",
+          "workspaceId": "${SILVER_STAGING_WORKSPACE_ID}",
+          "items": [
+            "silver_lakehouse",
+            "02_clean_sales_data",
+            "silver_transform_pipeline"
+          ]
+        },
+        "Prod": {
+          "workspaceName": "Road4_Silver",
+          "workspaceId": "${SILVER_PROD_WORKSPACE_ID}",
+          "items": [
+            "silver_lakehouse",
+            "02_clean_sales_data",
+            "silver_transform_pipeline"
+          ]
+        }
+      },
+      "Gold": {
+        "Dev": {
+          "workspaceName": "Road4_Gold_Dev",
+          "workspaceId": "${GOLD_DEV_WORKSPACE_ID}",
+          "items": [
+            "gold_lakehouse",
+            "03_curate_sales_mart",
+            "gold_curated_pipeline"
+          ]
+        },
+        "Staging": {
+          "workspaceName": "Road4_Gold_Staging",
+          "workspaceId": "${GOLD_STAGING_WORKSPACE_ID}",
+          "items": [
+            "gold_lakehouse",
+            "03_curate_sales_mart",
+            "gold_curated_pipeline"
+          ]
+        },
+        "Prod": {
+          "workspaceName": "Road4_Gold",
+          "workspaceId": "${GOLD_PROD_WORKSPACE_ID}",
+          "items": [
+            "gold_lakehouse",
+            "03_curate_sales_mart",
+            "gold_curated_pipeline"
+          ]
+        }
+      }
+    },
+    "deploymentRules": [
+      {
+        "name": "promote-dev-to-staging",
+        "source": "Dev",
+        "target": "Staging",
+        "type": "StandardDeployment",
+        "options": {
+          "replaceItems": true,
+          "updateAllowedDomains": true,
+          "updateRefreshSchedules": true,
+          "updateConnectionStrings": true
+        },
+        "validation": {
+          "runValidation": true,
+          "stopOnValidationError": false
+        }
+      },
+      {
+        "name": "promote-staging-to-prod",
+        "source": "Staging",
+        "target": "Prod",
+        "type": "StandardDeployment",
+        "options": {
+          "replaceItems": true,
+          "updateAllowedDomains": true,
+          "updateRefreshSchedules": false,
+          "updateConnectionStrings": false,
+          "preserveConnectionStrings": true
+        },
+        "validation": {
+          "runValidation": true,
+          "stopOnValidationError": true
+        }
+      }
+    ],
+    "dataSourceConfig": {
+      "mappings": [
+        {
+          "stageFrom": "Dev",
+          "stageTo": "Staging",
+          "connectionStringRules": []
+        },
+        {
+          "stageFrom": "Staging",
+          "stageTo": "Prod",
+          "connectionStringRules": []
+        }
+      ]
+    }
+  }
+}
