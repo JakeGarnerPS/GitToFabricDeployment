@@ -11,88 +11,13 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
-import requests
+from medallion.capacity import CapacityClient, load_workspace_ids, write_results
+from medallion.utils import get_access_token_interactive
 
-
-FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1"
 DEFAULT_WORKSPACE_IDS_FILE = "infra/workspace_ids.json"
-DEFAULT_RESULTS_FILE = "infra/workspace_capacity_assignment_results.json"
-
-
-class FabricClient:
-    """Client for Fabric capacity assignment operations."""
-
-    def __init__(self, access_token: str):
-        self.headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
-
-    def assign_workspace_to_capacity(self, workspace_id: str, capacity_id: str) -> Tuple[int, str, str]:
-        """
-        Assign a workspace to a Fabric capacity.
-
-        Returns:
-            (status_code, endpoint_used, response_text)
-        """
-        payload = {"capacityId": capacity_id}
-
-        # Keep more than one endpoint pattern to handle tenant/API variations.
-        endpoint_templates = [
-            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/assignToCapacity",
-            f"{FABRIC_API_BASE_URL}/workspaces/{workspace_id}/capacityAssignments",
-        ]
-
-        last_status = 0
-        last_text = ""
-        last_endpoint = endpoint_templates[0]
-
-        for endpoint in endpoint_templates:
-            response = requests.post(endpoint, json=payload, headers=self.headers)
-
-            if response.status_code in (200, 201, 202, 204):
-                return response.status_code, endpoint, response.text
-
-            # If endpoint does not exist in this API version, try fallback endpoint.
-            if response.status_code in (404, 405):
-                last_status = response.status_code
-                last_text = response.text
-                last_endpoint = endpoint
-                continue
-
-            # For permission/validation errors, stop immediately.
-            return response.status_code, endpoint, response.text
-
-        return last_status, last_endpoint, last_text
-
-
-def get_access_token_interactive() -> str:
-    """Get Fabric API access token from Azure CLI."""
-    print("Attempting to get access token via Azure CLI...")
-    try:
-        result = subprocess.run(
-            [
-                "az",
-                "account",
-                "get-access-token",
-                "--resource",
-                "https://api.fabric.microsoft.com",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        token_data = json.loads(result.stdout)
-        return token_data["accessToken"]
-    except FileNotFoundError:
-        print("❌ Azure CLI not found. Install Azure CLI or pass --token.")
-        sys.exit(1)
-    except subprocess.CalledProcessError:
-        print("❌ Failed to get access token. Run 'az login' first.")
-        sys.exit(1)
+DEFAULT_RESULTS_FILE = "infra/assignment_results.json"
 
 
 def load_workspace_ids(path: str) -> List[Dict[str, str]]:

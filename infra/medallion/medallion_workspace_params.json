@@ -16,12 +16,12 @@
     "git_connection_id": "06367384-5c07-47cb-9885-bcb5123c7bbd"
   },
   "workspace_names": {
-    "Bronze_Dev": "Road4_Bronze_Dev",
     "Bronze_Prod": "Road4_Bronze",
+    "Bronze_Dev": "Road4_Bronze_Dev",
     "Bronze_Staging": "Road4_Bronze_Staging",
     "Bronze_Feature": "Road4_Bronze_Feature",
-    "Silver_Dev": "Road4_Silver_Dev",
     "Silver_Prod": "Road4_Silver",
+    "Silver_Dev": "Road4_Silver_Dev",
     "Silver_Staging": "Road4_Silver_Staging",
     "Silver_Feature": "Road4_Silver_Feature",
     "Gold_Dev": "Road4_Gold_Dev",

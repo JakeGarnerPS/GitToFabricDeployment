@@ -17,155 +17,17 @@ import os
 import sys
 import time
 from typing import Dict, Optional, List
-import requests
 from pathlib import Path
+
+from medallion.fabric_pipeline import FabricDeploymentClient
+from medallion.fabric_pipeline import load as _load  # placeholder if needed
 
 
 FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1"
 POWER_BI_API_BASE_URL = "https://api.powerbi.com/v1.0/myorg"
 
 
-class FabricDeploymentClient:
-    """Client for managing Fabric Deployment Pipelines"""
-
-    def __init__(self, access_token: str):
-        self.access_token = access_token
-        self.headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
-
-    def create_deployment_pipeline(self, pipeline_config: Dict) -> Dict:
-        """Create a deployment pipeline."""
-        url = f"{FABRIC_API_BASE_URL}/deploymentPipelines"
-
-        payload = {
-            "displayName": pipeline_config["displayName"],
-            "description": pipeline_config.get("description", ""),
-            "stages": pipeline_config["stages"],
-        }
-
-        response = requests.post(url, json=payload, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-
-    def list_deployment_pipelines(self) -> List[Dict]:
-        """List all deployment pipelines."""
-        url = f"{FABRIC_API_BASE_URL}/deploymentPipelines"
-
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        return response.json().get("value", [])
-
-    def get_deployment_pipeline(self, pipeline_id: str) -> Dict:
-        """Get a specific deployment pipeline."""
-        url = f"{FABRIC_API_BASE_URL}/deploymentPipelines/{pipeline_id}"
-
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-
-    def add_stage_to_pipeline(
-        self,
-        pipeline_id: str,
-        stage_name: str,
-        workspace_id: str,
-        order: int = 0,
-        description: str = "",
-        is_public: bool = False,
-    ) -> Dict:
-        """Add a stage to a deployment pipeline."""
-        url = f"{FABRIC_API_BASE_URL}/deploymentPipelines/{pipeline_id}/stages"
-
-        payload = {
-            "displayName": stage_name,
-            "workspaceId": workspace_id,
-            "order": order,
-            "description": description,
-            "isPublic": is_public,
-        }
-
-        response = requests.post(url, json=payload, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-
-    def deploy_items(
-        self,
-        pipeline_id: str,
-        source_stage_id: str,
-        target_stage_id: str,
-        items: List[str],
-    ) -> Dict:
-        """Deploy items from source stage to target stage."""
-        url = f"{FABRIC_API_BASE_URL}/deploymentPipelines/{pipeline_id}/deploy"
-
-        payload = {
-            "sourceStageId": source_stage_id,
-            "targetStageId": target_stage_id,
-            "items": items,
-            "options": {
-                "allowOverwriteItems": True,
-            },
-        }
-
-        response = requests.post(url, json=payload, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-
-    def get_deployment_status(
-        self,
-        pipeline_id: str,
-        deployment_id: str,
-    ) -> Dict:
-        """Get the status of a deployment."""
-        url = f"{FABRIC_API_BASE_URL}/deploymentPipelines/{pipeline_id}/deployments/{deployment_id}"
-
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-
-    def update_deployment_settings(
-        self,
-        pipeline_id: str,
-        stage_id: str,
-        settings: Dict,
-    ) -> Dict:
-        """Update deployment settings for a stage."""
-        url = f"{FABRIC_API_BASE_URL}/deploymentPipelines/{pipeline_id}/stages/{stage_id}"
-
-        response = requests.patch(url, json=settings, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-
-    def set_stage_users(
-        self,
-        pipeline_id: str,
-        stage_id: str,
-        users: List[str],
-    ) -> Dict:
-        """Set users who can edit items in a stage."""
-        url = f"{FABRIC_API_BASE_URL}/deploymentPipelines/{pipeline_id}/stages/{stage_id}/users"
-
-        payload = {
-            "principalIds": users,
-        }
-
-        response = requests.post(url, json=payload, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-
-    def get_pipeline_items(
-        self,
-        pipeline_id: str,
-        stage_id: str,
-    ) -> List[Dict]:
-        """Get items in a specific stage."""
-        url = f"{FABRIC_API_BASE_URL}/deploymentPipelines/{pipeline_id}/stages/{stage_id}/items"
-
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        return response.json().get("value", [])
-
+# FabricDeploymentClient moved to medallion.fabric_pipeline
 
 def load_config(config_file: str) -> Dict:
     """Load deployment configuration from JSON file"""

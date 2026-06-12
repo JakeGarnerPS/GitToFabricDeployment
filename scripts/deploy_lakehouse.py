@@ -12,109 +12,13 @@ from pathlib import Path
 import requests
 from typing import Optional
 
+from medallion.lakehouse import LakehouseClient
+
 # Configuration
 FABRIC_API_BASE_URL = "https://api.fabric.microsoft.com/v1"
 LAKEHOUSE_NAME = "medallion_lakehouse"
 SAMPLE_DATA_FILE = "data/sample_raw_sales.csv"
 SAMPLE_DATA_FOLDER = "raw"
-
-
-class FabricClient:
-    """Client for interacting with Microsoft Fabric API"""
-    
-    def __init__(self, workspace_id: str, access_token: str):
-        """
-        Initialize Fabric client
-        
-        Args:
-            workspace_id: Fabric workspace ID
-            access_token: Azure access token for Fabric API
-        """
-        self.workspace_id = workspace_id
-        self.access_token = access_token
-        self.headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
-    
-    def create_lakehouse(self, name: str = LAKEHOUSE_NAME) -> dict:
-        """
-        Create a new lakehouse in the workspace
-        
-        Args:
-            name: Name of the lakehouse
-            
-        Returns:
-            Response JSON with lakehouse details
-        """
-        url = f"{FABRIC_API_BASE_URL}/workspaces/{self.workspace_id}/lakehouses"
-        
-        payload = {
-            "displayName": name
-        }
-        
-        response = requests.post(url, json=payload, headers=self.headers)
-        response.raise_for_status()
-        
-        return response.json()
-    
-    def get_lakehouse(self, name: str = LAKEHOUSE_NAME) -> Optional[dict]:
-        """
-        Get lakehouse by name in the workspace
-        
-        Args:
-            name: Name of the lakehouse
-            
-        Returns:
-            Lakehouse details or None if not found
-        """
-        url = f"{FABRIC_API_BASE_URL}/workspaces/{self.workspace_id}/lakehouses"
-        
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        
-        lakehouses = response.json().get("value", [])
-        
-        for lakehouse in lakehouses:
-            if lakehouse.get("displayName") == name:
-                return lakehouse
-        
-        return None
-    
-    def upload_file_to_lakehouse(
-        self,
-        lakehouse_id: str,
-        file_path: str,
-        target_folder: str = "Files"
-    ) -> dict:
-        """
-        Upload a file to lakehouse
-        
-        Args:
-            lakehouse_id: ID of the target lakehouse
-            file_path: Local path to the file to upload
-            target_folder: Target folder in lakehouse (e.g., "Files/raw")
-            
-        Returns:
-            Response JSON
-        """
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File not found: {file_path}")
-        
-        filename = os.path.basename(file_path)
-        url = (
-            f"{FABRIC_API_BASE_URL}/workspaces/{self.workspace_id}/lakehouses/{lakehouse_id}"
-            f"/files/{target_folder}/{filename}"
-        )
-        
-        with open(file_path, "rb") as f:
-            files = {"file": (filename, f)}
-            headers = {"Authorization": f"Bearer {self.access_token}"}
-            response = requests.post(url, files=files, headers=headers)
-        
-        response.raise_for_status()
-        
-        return response.json()
 
 
 def get_access_token_interactive() -> str:
@@ -207,7 +111,7 @@ Examples:
     print("🚀 Starting Fabric deployment...")
     
     # Initialize client
-    client = FabricClient(args.workspace_id, access_token)
+    client = LakehouseClient(args.workspace_id, access_token)
     
     # Check if lakehouse exists
     print(f"\n📋 Checking for existing lakehouse '{args.lakehouse_name}'...")
