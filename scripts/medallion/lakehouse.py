@@ -15,16 +15,32 @@ class LakehouseClient:
             "Content-Type": "application/json",
         }
 
+    def list_workspaces(self) -> list[dict]:
+        url = f"{FABRIC_API_BASE_URL}/workspaces"
+        response = requests.get(url, headers=self.headers)
+        response.raise_for_status()
+        return response.json().get("value", [])
+
+    def get_workspace_by_name(self, name: str) -> Optional[dict]:
+        for workspace in self.list_workspaces():
+            if workspace.get("displayName") == name:
+                return workspace
+        return None
+
     def create_lakehouse(self, name: str) -> dict:
         url = f"{FABRIC_API_BASE_URL}/workspaces/{self.workspace_id}/lakehouses"
         payload = {"displayName": name}
         response = requests.post(url, json=payload, headers=self.headers)
+        if response.status_code == 409:
+            return {"id": None, "displayName": name, "status": "exists"}
         response.raise_for_status()
         return response.json()
 
     def get_lakehouse(self, name: str) -> Optional[dict]:
         url = f"{FABRIC_API_BASE_URL}/workspaces/{self.workspace_id}/lakehouses"
         response = requests.get(url, headers=self.headers)
+        if response.status_code == 404:
+            return None
         response.raise_for_status()
         for lh in response.json().get("value", []):
             if lh.get("displayName") == name:

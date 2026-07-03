@@ -15,13 +15,13 @@ For each workspace this script:
 4. Deploys notebooks to that workspace
 """
 
-import argparse
 import json
 import os
 import subprocess
 import sys
 import time
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import List
 
 from medallion.client import FabricClient
@@ -60,167 +60,42 @@ from medallion.utils import (
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Deploy medallion Bronze/Silver/Gold tier workspaces to Microsoft Fabric",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace Dev\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace Prod\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace Staging\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspace all\n"
-            "  python scripts/deploy_medallion_workspaces.py --interactive --workspaces-only\n"
-            "  python scripts/deploy_medallion_workspaces.py --token <token> --params-file infra/medallion_workspace_params.json\n"
-            "  python scripts/deploy_medallion_workspaces.py --tiers Bronze,Silver --environments Dev,Prod --capacity-id <id>"
-        ),
+    if len(sys.argv) > 1:
+        print("This script uses the params file and does not accept command line arguments.")
+        sys.exit(1)
+
+    params = load_params_file(DEFAULT_PARAMS_FILE)
+    args = SimpleNamespace(
+        token=os.environ.get("FABRIC_ACCESS_TOKEN") or os.environ.get("AZURE_ACCESS_TOKEN"),
+        interactive=False,
+        prefix=params.get("prefix", "Road4"),
+        tiers=params.get("tiers", ",".join(DEFAULT_TIERS)),
+        environments=params.get("environments", ",".join(DEFAULT_ENVIRONMENTS)),
+        prod_environment=params.get("prod_environment", DEFAULT_PROD_ENVIRONMENT),
+        workspace="all",
+        notebook_dir=params.get("notebook_dir", "."),
+        capacity_id=params.get("capacity_id"),
+        workspace_description=params.get("workspace_description", "Managed by deploy_medallion_workspaces.py"),
+        params_file=DEFAULT_PARAMS_FILE,
+        workspace_ids_output=params.get("workspace_ids_output", DEFAULT_WORKSPACE_IDS_OUTPUT),
+        skip_existing_notebooks=False,
+        skip_existing_pipelines=False,
+        workspaces_only=False,
+        git_sync=False,
+        git_provider=None,
+        git_org=None,
+        git_repo=None,
+        git_branch=None,
+        git_project=None,
+        git_credential_type=None,
+        git_connection_id=None,
+        git_pat=None,
     )
 
-    parser.add_argument(
-        "--token",
-        help="Azure access token for https://api.fabric.microsoft.com",
-    )
-    parser.add_argument(
-        "--interactive",
-        action="store_true",
-        help="Get token using Azure CLI",
-    )
-    parser.add_argument(
-        "--prefix",
-        default=None,
-        help="Workspace naming prefix (default: Road4)",
-    )
-    parser.add_argument(
-        "--tiers",
-        default=None,
-        help="Comma-separated medallion tiers to deploy (default: Bronze,Silver,Gold)",
-    )
-    parser.add_argument(
-        "--environments",
-        default=None,
-        help="Comma-separated environments to deploy per tier (default: Dev,Prod,Staging,Feature)",
-    )
-    parser.add_argument(
-        "--prod-environment",
-        default=None,
-        help=(
-            "Environment name that gets no suffix in workspace names (default: Prod). "
-            "e.g., 'Road4_Bronze' instead of 'Road4_Bronze_Prod'"
-        ),
-    )
-    parser.add_argument(
-        "--workspace",
-        default="all",
-        help=(
-            "Filter deployment to a single environment (e.g., Dev, Prod) across all tiers, "
-            "or 'all' to deploy every environment (default: all)."
-        ),
-    )
-    parser.add_argument(
-        "--notebook-dir",
-        default=None,
-        help="Base directory containing tier notebook folders (default: current directory)",
-    )
-    parser.add_argument(
-        "--capacity-id",
-        help="Optional Fabric capacity ID for workspace creation",
-    )
-    parser.add_argument(
-        "--workspace-description",
-        default=None,
-        help="Description set on created workspaces",
-    )
-    parser.add_argument(
-        "--params-file",
-        default=DEFAULT_PARAMS_FILE,
-        help=f"Path to JSON parameter file (default: {DEFAULT_PARAMS_FILE})",
-    )
-    parser.add_argument(
-        "--workspace-ids-output",
-        default=None,
-        help=f"Output JSON path for created workspace IDs (default: {DEFAULT_WORKSPACE_IDS_OUTPUT})",
-    )
-    parser.add_argument(
-        "--skip-existing-notebooks",
-        action="store_true",
-        help="Skip notebook deployment when the notebook already exists",
-    )
-    parser.add_argument(
-        "--skip-existing-pipelines",
-        action="store_true",
-        help="Skip pipeline deployment when the pipeline already exists",
-    )
-    parser.add_argument(
-        "--workspaces-only",
-        action="store_true",
-        help="Only create/verify workspaces and assign capacity. Skip lakehouses, notebooks, and pipelines.",
-    )
-    parser.add_argument(
-        "--git-sync",
-        action="store_true",
-        help=(
-            "Connect each workspace to its tier directory in the Git repo and sync items "
-            "using the Fabric Git Integration API. Items are created with the correct "
-            "logicalId values from .platform files, making subsequent Git syncs conflict-free. "
-            "Skips individual REST API item creation."
-        ),
-    )
-    parser.add_argument(
-        "--git-provider",
-        default=None,
-        choices=["GitHub", "AzureDevOps"],
-        help="Git provider type for --git-sync (default: GitHub)",
-    )
-    parser.add_argument(
-        "--git-org",
-        default=None,
-        help="GitHub owner name or Azure DevOps organisation name for --git-sync",
-    )
-    parser.add_argument(
-        "--git-repo",
-        default=None,
-        help="Repository name for --git-sync",
-    )
-    parser.add_argument(
-        "--git-branch",
-        default=None,
-        help="Branch name for --git-sync (default: current git branch)",
-    )
-    parser.add_argument(
-        "--git-project",
-        default=None,
-        help="Azure DevOps project name (only required when --git-provider AzureDevOps)",
-    )
-    parser.add_argument(
-        "--git-credential-type",
-        default=None,
-        choices=["Automatic", "ConfiguredConnection", "PersonalAccessToken"],
-        help=(
-            "Credential type for the Fabric Git connect API (default: Automatic). "
-            "Use ConfiguredConnection when your Fabric tenant does not allow the "
-            "Automatic flow for GitHub connections."
-        ),
-    )
-    parser.add_argument(
-        "--git-connection-id",
-        default=None,
-        help="Fabric Git connection ID (required when --git-credential-type ConfiguredConnection)",
-    )
-    parser.add_argument(
-        "--git-pat",
-        default=None,
-        help="Deprecated. Use --git-credential-type ConfiguredConnection and --git-connection-id instead.",
-    )
-
-    args = parser.parse_args()
-
-    if args.interactive:
-        access_token = get_access_token_interactive()
-    elif args.token:
+    if args.token:
         access_token = args.token
     else:
-        print("❌ Provide --token or use --interactive")
-        sys.exit(1)
+        access_token = get_access_token_interactive()
 
     try:
         params = load_params_file(args.params_file)

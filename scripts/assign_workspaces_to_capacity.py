@@ -6,11 +6,11 @@ Reads workspace IDs from infra/workspace_ids.json (or another path) and assigns 
 workspace to a specified capacity using Fabric REST API.
 """
 
-import argparse
 import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from medallion.capacity import CapacityClient, load_workspace_ids, write_results
@@ -67,74 +67,32 @@ def write_results(path: str, payload: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Bulk-assign Fabric workspaces to a target capacity",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  python scripts/assign_workspaces_to_capacity.py --interactive --capacity-id <capacityId>\n"
-            "  python scripts/assign_workspaces_to_capacity.py --token <token> --capacity-id <capacityId> --workspace-ids-file infra/workspace_ids.json"
-        ),
-    )
+    if len(sys.argv) > 1:
+        print("This script uses the params file and does not accept command line arguments.")
+        sys.exit(1)
 
-    parser.add_argument(
-        "--token",
-        help="Azure access token for https://api.fabric.microsoft.com",
-    )
-    parser.add_argument(
-        "--interactive",
-        action="store_true",
-        help="Get token using Azure CLI",
-    )
-    parser.add_argument(
-        "--capacity-id",
-        required=True,
-        help="Target Fabric capacity ID",
-    )
-    parser.add_argument(
-        "--workspace-ids-file",
-        default=DEFAULT_WORKSPACE_IDS_FILE,
-        help=f"Path to workspace IDs input JSON (default: {DEFAULT_WORKSPACE_IDS_FILE})",
-    )
-    parser.add_argument(
-        "--results-file",
-        default=DEFAULT_RESULTS_FILE,
-        help=f"Path for assignment results JSON (default: {DEFAULT_RESULTS_FILE})",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print planned assignments without making API calls",
-    )
-    parser.add_argument(
-        "--fail-fast",
-        action="store_true",
-        help="Stop on first assignment failure",
-    )
-
-    args = parser.parse_args()
-
-    if args.interactive:
+    access_token = os.environ.get("FABRIC_ACCESS_TOKEN") or os.environ.get("AZURE_ACCESS_TOKEN")
+    if not access_token:
         access_token = get_access_token_interactive()
-    elif args.token:
-        access_token = args.token
-    else:
-        print("❌ Provide --token or use --interactive")
+
+    capacity_id = os.environ.get("FABRIC_CAPACITY_ID")
+    if not capacity_id:
+        print("❌ Set FABRIC_CAPACITY_ID before running this script.")
         sys.exit(1)
 
     try:
-        workspaces = load_workspace_ids(args.workspace_ids_file)
+        workspaces = load_workspace_ids(DEFAULT_WORKSPACE_IDS_FILE)
     except (FileNotFoundError, ValueError) as error:
         print(f"❌ {error}")
         sys.exit(1)
 
     print("🚀 Starting workspace-to-capacity assignment...")
-    print(f"   Capacity ID: {args.capacity_id}")
-    print(f"   Input file: {args.workspace_ids_file}")
+    print(f"   Capacity ID: {capacity_id}")
+    print(f"   Input file: {DEFAULT_WORKSPACE_IDS_FILE}")
     print(f"   Workspaces found: {len(workspaces)}")
-    print(f"   Dry run: {args.dry_run}")
+    print("   Dry run: False")
 
-    client = FabricClient(access_token)
+    client = CapacityClient(access_token)
 
     assigned = 0
     failed = 0
@@ -147,22 +105,9 @@ def main() -> None:
 
         print(f"\n🧭 [{environment}] {workspace_name} ({workspace_id})")
 
-        if args.dry_run:
-            print("   📝 Dry run only; no API call made")
-            details.append(
-                {
-                    "environment": environment,
-                    "workspaceName": workspace_name,
-                    "workspaceId": workspace_id,
-                    "capacityId": args.capacity_id,
-                    "status": "dry-run",
-                }
-            )
-            continue
-
         status_code, endpoint, response_text = client.assign_workspace_to_capacity(
             workspace_id,
-            args.capacity_id,
+            capacity_id,
         )
 
         if status_code in (200, 201, 202, 204):
@@ -173,7 +118,7 @@ def main() -> None:
                     "environment": environment,
                     "workspaceName": workspace_name,
                     "workspaceId": workspace_id,
-                    "capacityId": args.capacity_id,
+                    "capacityId": capacity_id,
                     "status": "assigned",
                     "httpStatus": status_code,
                     "endpoint": endpoint,
@@ -189,7 +134,7 @@ def main() -> None:
                     "environment": environment,
                     "workspaceName": workspace_name,
                     "workspaceId": workspace_id,
-                    "capacityId": args.capacity_id,
+                    "capacityId": capacity_id,
                     "status": "failed",
                     "httpStatus": status_code,
                     "endpoint": endpoint,
@@ -197,14 +142,11 @@ def main() -> None:
                 }
             )
 
-            if args.fail_fast:
-                break
-
     result_payload = {
         "generatedAtUtc": datetime.now(timezone.utc).isoformat(),
-        "capacityId": args.capacity_id,
-        "inputFile": args.workspace_ids_file,
-        "dryRun": args.dry_run,
+        "capacityId": capacity_id,
+        "inputFile": DEFAULT_WORKSPACE_IDS_FILE,
+        "dryRun": False,
         "summary": {
             "total": len(workspaces),
             "assigned": assigned,
@@ -212,7 +154,7 @@ def main() -> None:
         },
         "details": details,
     }
-    write_results(args.results_file, result_payload)
+    write_results(DEFAULT_RESULTS_FILE, result_payload)
 
     print("\n" + "=" * 72)
     print("📊 Assignment Summary")
@@ -220,9 +162,9 @@ def main() -> None:
     print(f"Total: {len(workspaces)}")
     print(f"Assigned: {assigned}")
     print(f"Failed: {failed}")
-    print(f"Results file: {args.results_file}")
+    print(f"Results file: {DEFAULT_RESULTS_FILE}")
 
-    if failed > 0 and not args.dry_run:
+    if failed > 0:
         sys.exit(1)
 
 
