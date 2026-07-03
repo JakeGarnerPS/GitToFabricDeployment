@@ -40,6 +40,10 @@ def main() -> None:
     print(f"Using params: {DEFAULT_PARAMS_FILE}")
     print(f"Will ensure {len(tiers) * len(environments)} workspaces")
 
+    #Testing
+    tiers =["Bronze"]
+    environments = ["Dev"]
+
     for tier in tiers:
         for environment in environments:
             workspace_name = resolve_tier_workspace_name(
@@ -59,6 +63,8 @@ def main() -> None:
                 resolved_lakehouse_name = params.get("tier_lakehouses", {}).get(tier.lower()) or f"{tier.lower()}_lakehouse"
                 response = workspace_client.get_or_create_lakehouse(workspace_id, resolved_lakehouse_name)                
                 lakehouse_id = response.get("id")
+
+                # Deploy notebooks
 
                 print(f"   ✅ Lakehouse deployed in workspace: {workspace_name}")
 
