@@ -3,6 +3,7 @@ import json
 from typing import Dict, List, Optional
 
 import requests
+import time
 
 from .constants import FABRIC_API_BASE_URL
 from .utils import build_platform_payload_b64, normalize_pipeline_definition
