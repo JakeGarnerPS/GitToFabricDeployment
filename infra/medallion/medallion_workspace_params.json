@@ -36,14 +36,14 @@
   },
   "tier_notebooks": {
     "Bronze": [
-      "Bronze/Notebooks/01_ingest_raw_sales_python.Notebook",
-      "Bronze/Notebooks/01_ingest_raw_sales.Notebook"
+      "01_ingest_raw_sales_python.Notebook",
+      "01_ingest_raw_sales.Notebook"
     ],
     "Silver": [
-      "Silver/Notebooks/02_clean_sales_data.Notebook"
+      "02_clean_sales_data.Notebook"
     ],
     "Gold": [
-      "Gold/Notebooks/03_curate_sales_mart.Notebook"
+      "03_curate_sales_mart.Notebook"
     ]
   },
   "tier_pipelines": {
